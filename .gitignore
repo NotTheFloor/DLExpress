@@ -44,6 +44,7 @@ dist/
 .env.test.local
 .env.production.local
 
+env/
 
 # Ignore sensitive files
 # Add any sensitive files or files containing secrets/API keys here
