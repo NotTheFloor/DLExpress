@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout
 from PySide6.QtCore import Qt
 
 from .wfd_drawing_widget import DrawingWidget
+from .wfd_objects import Node as WFN
 
 _DEF_WDW_SZ_X = 800
 _DEF_WDW_SZ_Y = 600
@@ -9,7 +10,7 @@ _DEF_T_RP_Y = 400
 _DEF_B_RP_Y = 200
 
 class WorkflowDesignerWindow(QDialog):
-    def __init__(self):
+    def __init__(self, nodeList: WFN):
         super().__init__()
 
         self.setWindowTitle("Workflow Designer")
@@ -17,7 +18,10 @@ class WorkflowDesignerWindow(QDialog):
 
         main_splitter = QSplitter(Qt.Horizontal)
 
-        self.drawing_area = DrawingWidget()
+
+        print("WFD")
+        print(nodeList)
+        self.drawing_area = DrawingWidget(nodeList)
         main_splitter.addWidget(self.drawing_area)
 
         right_pane = QSplitter(Qt.Vertical)
