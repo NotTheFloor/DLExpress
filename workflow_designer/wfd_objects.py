@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
-NODEPROPS = ['FillColor', 'TextColor', 'Text']
-NODEATTRIBS = ['Font', 'LayoutNode']
+NODEPROPS = ['FillColor', 'TextColor', 'Text', 'LabelEdit', 'Alignment']
+NODEATTRIBS = ['Font', 'LayoutNode', 'Shape']
 LINKPROPS = ['DrawColor']
 LINKATTRIBS = ['LayoutLink', 'Point']
 
 class Rect:
-    def __init__(self, left: int, top: int, width: int, height: int):
+    def __init__(self, left: float, top: float, width: float, height: float):
         self.left = left
         self.top = top
         self.width = width
@@ -23,3 +23,7 @@ class Node:
     nodeProps: dict
     nodeAttribs: dict[dict]
     
+@dataclass
+class Link:
+    linkProps: dict
+    linkAttribs: dict[dict]
