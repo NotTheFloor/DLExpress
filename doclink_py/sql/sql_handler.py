@@ -32,10 +32,10 @@ class SQLHandler:
         # Connect to SQL Server
         logging.info("Connecting to SQL Server...")
         self.connection = pyodbc.connect(
-            "DRIVER={ODBC Driver 17 for SQL Server};"
-            "SERVER=" + server_name + ";"
-            "DATABASE=" + database_name + ";"
-            "UID=" + username + ";"
+            "DRIVER={ODBC Driver 17 for SQL Server};" +
+            "SERVER=" + server_name + ";" +
+            "DATABASE=" + database_name + ";" +
+            "UID=" + username + ";" +
             "PWD=" + password + ";"
         )
         logging.debug("Connected to SQL Server.")

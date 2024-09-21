@@ -2,19 +2,18 @@ from PySide6.QtWidgets import QFrame
 from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtCore import QPoint
 
-from .wfd_objects import Node as WFN
+from .wfd_objects import Node
+
+from doclink_py.sql.doclink_sql import DocLinkSQL
 
 _DEF_DW_SZ_X = 600
 _DEF_DW_SZ_Y = 600
 
 class DrawingWidget(QFrame):
-    def __init__(self, nodeList: WFN, parent=None):
+    def __init__(self, doclink: Node, parent=None):
         super().__init__(parent)
 
-
-        print("DW")
-        print(nodeList)
-        self.nodeList: WFN = nodeList
+        #self.nodeList: Node = nodeList
 
         self.setMinimumSize(_DEF_DW_SZ_X, _DEF_DW_SZ_Y)
 
@@ -26,7 +25,7 @@ class DrawingWidget(QFrame):
         #painter.drawLine(10, 10, 200, 200)
 
         print("Nodes")
-        for node in self.nodeList:
-            painter.drawEllipse(QPoint(node.nodeRect.cx, node.nodeRect.cy), node.nodeRect.rx, node.nodeRect.ry)
+        #for node in self.nodeList:
+            #painter.drawEllipse(QPoint(node.nodeRect.cx, node.nodeRect.cy), node.nodeRect.rx, node.nodeRect.ry)
 
 

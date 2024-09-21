@@ -3,6 +3,9 @@ from PySide6.QtCore import Qt
 
 from .wfd_drawing_widget import DrawingWidget
 from .wfd_objects import Node as WFN
+from .scene_manager import WorkflowSceneManager
+
+from doclink_py.sql.doclink_sql import DocLinkSQL
 
 _DEF_WDW_SZ_X = 800
 _DEF_WDW_SZ_Y = 600
@@ -10,18 +13,17 @@ _DEF_T_RP_Y = 400
 _DEF_B_RP_Y = 200
 
 class WorkflowDesignerWindow(QDialog):
-    def __init__(self, nodeList: WFN):
+    def __init__(self, doclink: DocLinkSQL):
         super().__init__()
 
         self.setWindowTitle("Workflow Designer")
         self.setGeometry(150, 150, _DEF_WDW_SZ_X, _DEF_WDW_SZ_Y)
 
+        scene_manager = WorkflowSceneManager(doclink)
+
         main_splitter = QSplitter(Qt.Horizontal)
 
-
-        print("WFD")
-        print(nodeList)
-        self.drawing_area = DrawingWidget(nodeList)
+        self.drawing_area = DrawingWidget(doclink)
         main_splitter.addWidget(self.drawing_area)
 
         right_pane = QSplitter(Qt.Vertical)

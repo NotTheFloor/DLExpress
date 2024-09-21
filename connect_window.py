@@ -2,6 +2,8 @@ from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout, QHBoxL
 #from PySide6.QtGui import QLineEdit
 from PySide6.QtCore import Qt
 
+from doclink_py.sql.doclink_sql import DocLinkSQLCredentials, DocLinkSQL
+
 _DEF_WDW_SZ_X = 400
 _DEF_WDW_SZ_Y = 400
 
@@ -18,7 +20,7 @@ class ConnectWindow(QDialog):
 
         self.serverName_label = QLabel("Server name:")
         self.serverName_input = QLineEdit()
-        self.serverName_input.setText("192.168.2.21")
+        self.serverName_input.setText("172.16.205.129")
 
         self.databaseName_label = QLabel("Database name:")
         self.databaseName_input = QLineEdit()
@@ -68,7 +70,15 @@ class ConnectWindow(QDialog):
         self.setLayout(layout)
 
     def connect_action(self):
-        self.connection_handle = "Handled"
+        doclink = DocLinkSQL()
+        credentials = DocLinkSQLCredentials(
+                self.serverName_input.text(),
+                self.databaseName_input.text(),
+                self.username_input.text(),
+                self.password_input.text()
+            )
+        doclink.connect(credentials)
+        self.connection_handle = doclink
         self.accept()
 
     def exec_connect_window(self):
