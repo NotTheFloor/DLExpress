@@ -1,11 +1,12 @@
-from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout, QListView
+from PySide6.QtCore import Qt, QStringListModel
 
 from .wfd_drawing_widget import DrawingWidget
 from .wfd_objects import Node as WFN
 from .scene_manager import WorkflowSceneManager
 
 from doclink_py.sql.doclink_sql import DocLinkSQL
+from doclink_py.doclink_types.workflows import Workflow
 
 _DEF_WDW_SZ_X = 800
 _DEF_WDW_SZ_Y = 600
@@ -28,7 +29,8 @@ class WorkflowDesignerWindow(QDialog):
 
         right_pane = QSplitter(Qt.Vertical)
 
-        top_right = QTextEdit("Top right place holder")
+        #top_right = QTextEdit("Top right place holder")
+        top_right = self.workflow_list(scene_manager.workflows)
         top_right.setFixedHeight(_DEF_T_RP_Y)
 
         bottom_right = QTextEdit("Bottom right place holder")
@@ -43,3 +45,12 @@ class WorkflowDesignerWindow(QDialog):
         layout = QVBoxLayout()
         layout.addWidget(main_splitter)
         self.setLayout(layout)
+
+    def workflow_list(self, workflows) -> QListView:
+        workflow_str = [workflow.Title for workflow in workflows]
+        workflow_model = QStringListModel(workflow_str) 
+        workflow_list = QListView()
+        workflow_list.setModel(workflow_model)
+        workflow_list.setSelectionMode(QListView.SingleSelection)
+
+        return workflow_list

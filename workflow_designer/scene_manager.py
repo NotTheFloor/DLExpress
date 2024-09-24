@@ -4,13 +4,12 @@ from doclink_py.doclink_types.workflows import Workflow, WorkflowActivity, Workf
 class WorkflowSceneManager:
     def __init__(self, doclink):
 
-        workflows: list[Workflow] = []
-        workflows = doclink.get_workflows()
+        self.workflows: list[Workflow] = []
+        self.workflows = doclink.get_workflows()
 
-        statuses: list[WorkflowActivity]
-        statuses = doclink.get_workflow_activities()
+        self.statuses: list[WorkflowActivity]
+        self.statuses = doclink.get_workflow_activities()
 
-        placements: list[WorkflowPlacement] = []
-        placements = doclink.get_workflow_placements()
+        self.placements: list[WorkflowPlacement] = []
+        self.placements = doclink.get_workflow_placements()
 
-        print(workflows)
