@@ -1,5 +1,3 @@
-import xml.etree.ElementTree as ET
-
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QVBoxLayout
 
 from workflow_designer.wfd_window import WorkflowDesignerWindow

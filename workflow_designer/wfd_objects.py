@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-NODEPROPS = ['FillColor', 'TextColor', 'Text', 'LabelEdit', 'Alignment']
+NODEPROPS = ['FillColor', 'TextColor', 'Text', 'LabelEdit', 'Alignment', 'DrawColor', 'Shadow']
 NODEATTRIBS = ['Font', 'LayoutNode', 'Shape']
-LINKPROPS = ['DrawColor']
+LINKPROPS = ['DrawColor', 'Shadow', 'DashStyle']
 LINKATTRIBS = ['LayoutLink', 'Point']
 
 class Rect:

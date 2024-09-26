@@ -1,11 +1,15 @@
 from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel
 #from PySide6.QtGui import QLineEdit
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from doclink_py.sql.doclink_sql import DocLinkSQLCredentials, DocLinkSQL
 
 _DEF_WDW_SZ_X = 400
 _DEF_WDW_SZ_Y = 400
+
+_DEF_SVR_NAME = "192.168.1.38"
+_DEF_DB_NAME = "doclink2"
+_DEF_USR_NAME = "sa"
 
 class ConnectWindow(QDialog):
     def __init__(self):
@@ -20,15 +24,15 @@ class ConnectWindow(QDialog):
 
         self.serverName_label = QLabel("Server name:")
         self.serverName_input = QLineEdit()
-        self.serverName_input.setText("172.16.205.129")
+        self.serverName_input.setText(_DEF_SVR_NAME)
 
         self.databaseName_label = QLabel("Database name:")
         self.databaseName_input = QLineEdit()
-        self.databaseName_input.setText("doclink2")
+        self.databaseName_input.setText(_DEF_DB_NAME)
 
         self.username_label = QLabel("Username:")
         self.username_input = QLineEdit()
-        self.username_input.setText("sa")
+        self.username_input.setText(_DEF_USR_NAME)
 
         self.password_label = QLabel("Password:")
         self.password_input = QLineEdit()
@@ -47,6 +51,8 @@ class ConnectWindow(QDialog):
         layout.addWidget(self.password_input)
 
         layout.addStretch()
+
+        QTimer.singleShot(0, self.password_input.setFocus)
 
 #        ## Old
 #        login = QLineEdit()

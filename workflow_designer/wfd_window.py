@@ -8,10 +8,10 @@ from .scene_manager import WorkflowSceneManager
 from doclink_py.sql.doclink_sql import DocLinkSQL
 from doclink_py.doclink_types.workflows import Workflow
 
-_DEF_WDW_SZ_X = 800
-_DEF_WDW_SZ_Y = 600
-_DEF_T_RP_Y = 400
-_DEF_B_RP_Y = 200
+_DEF_WDW_SZ_X = 1600
+_DEF_WDW_SZ_Y = 900
+_DEF_T_RP_Y = 600
+_DEF_B_RP_Y = 300
 
 class WorkflowDesignerWindow(QDialog):
     def __init__(self, doclink: DocLinkSQL):
@@ -21,10 +21,11 @@ class WorkflowDesignerWindow(QDialog):
         self.setGeometry(150, 150, _DEF_WDW_SZ_X, _DEF_WDW_SZ_Y)
 
         scene_manager = WorkflowSceneManager(doclink)
+        sceneDict = scene_manager.build_scenes()
 
         main_splitter = QSplitter(Qt.Horizontal)
 
-        self.drawing_area = DrawingWidget(doclink)
+        self.drawing_area = DrawingWidget(sceneDict)
         main_splitter.addWidget(self.drawing_area)
 
         right_pane = QSplitter(Qt.Vertical)
@@ -40,7 +41,7 @@ class WorkflowDesignerWindow(QDialog):
         right_pane.addWidget(bottom_right)
 
         main_splitter.addWidget(right_pane)
-        main_splitter.setSizes([600, 200]) # Need to add defaults for this
+        main_splitter.setSizes([_DEF_WDW_SZ_X - 200, 200]) # Need to add defaults for this
         
         layout = QVBoxLayout()
         layout.addWidget(main_splitter)
@@ -52,5 +53,9 @@ class WorkflowDesignerWindow(QDialog):
         workflow_list = QListView()
         workflow_list.setModel(workflow_model)
         workflow_list.setSelectionMode(QListView.SingleSelection)
+        workflow_list.clicked.connect(self.change_workflow)
 
         return workflow_list
+
+    def change_workflow(self, index):
+        self.drawing_area.change_workflow(index.data())
