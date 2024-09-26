@@ -86,16 +86,8 @@ class WorkflowSceneManager:
                 print("Error orgNode or dstNode is None")
                 quit()
 
-            shouldPrint = False
-            if (
-                    link.linkAttribs["LayoutLink"]["DstKey"] == "71d212ff-cc78-4e9d-9be1-d0ef180844f3" or
-                    link.linkAttribs["LayoutLink"]["OrgKey"] == "71d212ff-cc78-4e9d-9be1-d0ef180844f3"
-                    ):
-                shouldPrint = True
-                print("*****ZOOOOOOPPP******")
-
-            print("New link:")
-            print(link.linkAttribs)
+            # Create line segments 
+            # Source point
             x = orgNode.nodeRect.cx
             y = orgNode.nodeRect.cy
             nextX = dstNode.nodeRect.cx
@@ -109,14 +101,14 @@ class WorkflowSceneManager:
                     x = orgNode.nodeRect.left
                 else:
                     x = orgNode.nodeRect.left + orgNode.nodeRect.width
-            print(f"\t{(x, y)}")
             linkPoints.append((x, y, True))
 
+            # Mid points
             if 'Point' in link.linkAttribs:
                 for i in range(len(link.linkAttribs['Point'])):
-                    print(f"\t{(float(link.linkAttribs['Point'][i]['X']), float(link.linkAttribs['Point'][i]['Y']))}")
                     linkPoints.append((float(link.linkAttribs['Point'][i]['X']), float(link.linkAttribs['Point'][i]['Y']), False))
 
+            # End points
             x = dstNode.nodeRect.cx
             y = dstNode.nodeRect.cy
             if dstNode.nodeAttribs["LayoutNode"]["Type"] == "Workflow":
@@ -125,12 +117,8 @@ class WorkflowSceneManager:
                 else:
                     x = dstNode.nodeRect.left + dstNode.nodeRect.width
                 y = linkPoints[-1][1]
-            print(f"\t{(x, y)}")
             linkPoints.append((x, y, False))
 
-            if shouldPrint:
-                pass
-                #input("click")
 
         returnObject = {
                 "statuses": statuses,
@@ -194,13 +182,6 @@ class WorkflowSceneManager:
                     else:
                         _ign = input("Unknown subchild.tag during link search: " + subchild.tag)
 
-                
-                if (
-                        linkAttribs['LayoutLink']['DstKey'] == '71d212ff-cc78-4e9d-9be1-d0ef180844f3' or
-                        linkAttribs['LayoutLink']['OrgKey'] == '71d212ff-cc78-4e9d-9be1-d0ef180844f3' 
-                        ):
-                    pass
-                    #input(linkAttribs)
                 linkList.append(Link(linkProps, linkAttribs))
             elif child.tag == "Version":
                 continue

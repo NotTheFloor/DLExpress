@@ -7,7 +7,7 @@ from doclink_py.sql.doclink_sql import DocLinkSQLCredentials, DocLinkSQL
 _DEF_WDW_SZ_X = 400
 _DEF_WDW_SZ_Y = 400
 
-_DEF_SVR_NAME = "192.168.1.38"
+_DEF_SVR_NAME = "192.168.1.24"
 _DEF_DB_NAME = "doclink2"
 _DEF_USR_NAME = "sa"
 

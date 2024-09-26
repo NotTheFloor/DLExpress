@@ -5,6 +5,7 @@ from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtCore import QPoint, QRect
 
 from .wfd_objects import Node
+from .wfd_utilities import drawArrow
 
 from doclink_py.sql.doclink_sql import DocLinkSQL
 
@@ -29,12 +30,6 @@ class DrawingWidget(QFrame):
         pen = QPen(QColor(random.randint(0,255), random.randint(0,255), 0), 2)
         painter.setPen(pen)
 
-        #painter.drawLine(10, 10, 200, 200)
-
-        #print("Nodes")
-        #for node in self.nodeList:
-            #painter.drawEllipse(QPoint(node.nodeRect.cx, node.nodeRect.cy), node.nodeRect.rx, node.nodeRect.ry)
-
         currentScene = self.sceneDict[self.currentWorkflow]
 
         for key, workflow in currentScene["workflows"].items():
@@ -44,17 +39,20 @@ class DrawingWidget(QFrame):
             painter.drawEllipse(QPoint(status.nodeRect.cx, status.nodeRect.cy), status.nodeRect.rx, status.nodeRect.ry)
 
         for i in range(1, len(currentScene["linkPoints"])):
-            #if (currentScene["linkPoints"][i-1][0] == currentScene["linkPoints"][i][0] and
-            #    currentScene["linkPoints"][i-1][1] == currentScene["linkPoints"][i][1]):
+            # If new segment, skip to break line
             if currentScene["linkPoints"][i][2]:
                     continue
 
             
             pen = QPen(QColor(random.randint(0,255), random.randint(0,255), 0), 2)
             painter.setPen(pen)
-            painter.drawLine(
-                    currentScene["linkPoints"][i-1][0], 
-                    currentScene["linkPoints"][i-1][1], 
-                    currentScene["linkPoints"][i][0], 
-                    currentScene["linkPoints"][i][1]
-                    )
+            # This is gross
+            if i+1 == len(currentScene["linkPoints"]) or currentScene["linkPoints"][i+1][2]:
+                drawArrow(painter, currentScene["linkPoints"][i-1], currentScene["linkPoints"][i])
+            else:
+                painter.drawLine(
+                        currentScene["linkPoints"][i-1][0], 
+                        currentScene["linkPoints"][i-1][1], 
+                        currentScene["linkPoints"][i][0], 
+                        currentScene["linkPoints"][i][1]
+                        )

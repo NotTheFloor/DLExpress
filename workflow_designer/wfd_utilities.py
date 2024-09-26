@@ -1,96 +1,33 @@
-from workflow_designer.wfd_window import WorkflowDesignerWindow
-from workflow_designer.wfd_objects import Node, Link, Rect
+import math
 
-def buildScene(nodeList: list[Node], linkList: list[Link]):
-    statuses: dict = {}
-    workflows: dict = {}
-    links: dict = {}
-    linkPoints: list[tuple] = []
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QPainter
 
-    for node in nodeList:
-        if node.nodeAttribs["LayoutNode"]["Type"] == 'Status':
-            if node.nodeAttribs["LayoutNode"]["Key"] in statuses:
-                _ign = input("Error: node key already in statuses dict")
-            statuses[node.nodeAttribs["LayoutNode"]["Key"]] = node
-        elif node.nodeAttribs["LayoutNode"]["Type"] == 'Workflow':
-            if node.nodeAttribs["LayoutNode"]["Key"] in workflows:
-                _ign = input("Error: node key already in workflows dict")
-            workflows[node.nodeAttribs["LayoutNode"]["Key"]] = node
-        else:
-            _ign = input("Warning: unknown node type:" + node.nodeAtrribs["LayoutNode"]["Type"])
+# Inspired by https://forum.qt.io/topic/109749/how-to-create-an-arrow-in-qt/6
+# Probably worth converting all to Q primitives (QPointF, QLineF, etc.)
+def drawArrow(painter: QPainter, srcPoint: tuple, dstPoint: tuple, headSize: int = 5):
+    dx = srcPoint[0] - dstPoint[0]
+    dy = srcPoint[1] - dstPoint[1]
 
-    for link in linkList:
-        print(link)
-        orgNode = statuses.get(
-                link.linkAttribs["LayoutLink"]["OrgKey"],
-                workflows.get(link.linkAttribs["LayoutLink"]["OrgKey"], None)
-                )
-        if orgNode == None:
-            _ign = input("Error: layout org key not in workflow or status list: " + link.linkAttribs["LayoutLink"]["OrgKey"])
+    angle = math.atan2(-dy, dx)
 
-        dstNode = statuses.get(
-                link.linkAttribs["LayoutLink"]["DstKey"],
-                workflows.get(link.linkAttribs["LayoutLink"]["DstKey"], None)
-                )
-        if dstNode == None:
-            _ign = input("Error: layout dst key not in workflow or status list: " + link.linkAttribs["LayoutLink"]["DstKey"])
-
-        linkPoints.append((orgNode.nodeRect.cx, dstNode.nodeRect.cy))
-
-    returnObject = {
-            "statuses": statuses,
-            "workflows": workflows,
-            "links": links,
-            "linkPoints": linkPoints
-            }
-
-    return returnObjects
-
-def createObjectList(filename: str) -> list:
-    tree = ET.parse(filename)
-    root = tree.getroot()
-
-    nodeList: list[Node] = []
-    linkList: list[Link] = []
+    arrowP1X = dstPoint[0] + math.sin(angle + (math.pi / 3)) * headSize
+    arrowP1Y = dstPoint[1] + math.cos(angle + (math.pi / 3)) * headSize
     
-    for child in root:
-        if child.tag == 'Node':
-            nodeRect = Rect(
-                float(child.attrib["Left"]),
-                float(child.attrib["Top"]),
-                float(child.attrib["Width"]),
-                float(child.attrib["Height"])
-                )
+    arrowP2X = dstPoint[0] + math.sin(angle + math.pi - (math.pi / 3)) * headSize
+    arrowP2Y = dstPoint[1] + math.cos(angle + math.pi - (math.pi / 3)) * headSize
 
-            nodeProps = {}
-            nodeAttribs = {}
-            for subchild in child:
-                if subchild.tag in NODEPROPS:
-                    nodeProps[subchild.tag] = subchild.text
-                elif subchild.tag in NODEATTRIBS:
-                    nodeAttribs[subchild.tag] = subchild.attrib
-                else:
-                    _ign = input("Unknown subchild.tag during node search: " + subchild.tag)
+    painter.drawLine(
+            srcPoint[0],
+            srcPoint[1],
+            dstPoint[0],
+            dstPoint[1]
+        )
 
-                #print(attrib.tag, attrib.attrib)
-
-            nodeList.append(Node(nodeRect, nodeProps, nodeAttribs))
-        elif child.tag == 'Link':
-            linkProps = {} 
-            linkAttribs = {} 
-
-            for subchild in child:
-                if subchild.tag in LINKPROPS:
-                    linkProps[subchild.tag] = subchild.text
-                elif subchild.tag in wfo.LINKATTRIBS:
-                    linkAttribs[subchild.tag] = subchild.attrib
-                else:
-                    _ign = input("Unknown subchild.tag during link search: " + subchild.tag)
-
-            linkList.append(Link(linkProps, linkAttribs))
-        elif child.tag == "Version":
-            continue
-        else:
-            input("Unkown child tag:" + child.tag)
-
-    return buildScene(nodeList, linkList)
+    pointList = [
+            QPoint(dstPoint[0], dstPoint[1]),
+            QPoint(arrowP1X, arrowP1Y),
+            QPoint(arrowP2X, arrowP2Y)
+        ]
+    painter.drawPolygon(pointList, Qt.OddEvenFill)
+    
