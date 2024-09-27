@@ -41,10 +41,9 @@ class DrawingWidget(QFrame):
         for i in range(1, len(currentScene["linkPoints"])):
             # If new segment, skip to break line
             if currentScene["linkPoints"][i][2]:
-                    continue
-
+                pen = QPen(QColor(random.randint(0,255), random.randint(0,255), 0), 2)
+                continue
             
-            pen = QPen(QColor(random.randint(0,255), random.randint(0,255), 0), 2)
             painter.setPen(pen)
             # This is gross
             if i+1 == len(currentScene["linkPoints"]) or currentScene["linkPoints"][i+1][2]:

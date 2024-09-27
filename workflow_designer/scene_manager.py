@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import math
 
 from workflow_designer.wfd_objects import Node, Link, Rect, NODEPROPS, NODEATTRIBS, LINKPROPS, LINKATTRIBS
 
@@ -95,12 +96,25 @@ class WorkflowSceneManager:
             if 'Point' in link.linkAttribs:
                 nextX = float(link.linkAttribs['Point'][0]['X'])
                 nextY = float(link.linkAttribs['Point'][0]['Y'])
+            
             if orgNode.nodeAttribs["LayoutNode"]["Type"] == "Workflow":
                 y = nextY
                 if nextX < orgNode.nodeRect.cx:
                     x = orgNode.nodeRect.left
                 else:
                     x = orgNode.nodeRect.left + orgNode.nodeRect.width
+            else:
+                dx = nextX - x
+                dy = y - nextY
+                lineAngle = math.atan2(dy, dx)
+                a = orgNode.nodeRect.rx
+                b = orgNode.nodeRect.ry
+                top = a * b
+                bottom = (b * math.cos(lineAngle))**2 + (a * math.sin(lineAngle))**2
+                ellipseR = top / math.sqrt(bottom)
+                x = x + math.cos(lineAngle) * ellipseR
+                y = y - math.sin(lineAngle) * ellipseR
+
             linkPoints.append((x, y, True))
 
             # Mid points
@@ -117,6 +131,18 @@ class WorkflowSceneManager:
                 else:
                     x = dstNode.nodeRect.left + dstNode.nodeRect.width
                 y = linkPoints[-1][1]
+            else:
+                dx = x - linkPoints[-1][0]
+                dy = linkPoints[-1][1] - y
+                lineAngle = math.atan2(dy, dx)
+                a = dstNode.nodeRect.rx
+                b = dstNode.nodeRect.ry
+                top = a * b
+                bottom = (b * math.cos(lineAngle))**2 + (a * math.sin(lineAngle))**2
+                ellipseR = top / math.sqrt(bottom)
+                x = x - math.cos(lineAngle) * ellipseR
+                y = y + math.sin(lineAngle) * ellipseR
+
             linkPoints.append((x, y, False))
 
 
