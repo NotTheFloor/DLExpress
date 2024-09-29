@@ -23,6 +23,20 @@ class WorkflowSceneManager:
 
         self.build_scenes()
 
+    def getStatusSequence(self, workflowKey: str) -> list:
+
+        workflow = get_object_from_list(self.workflows, "WorkflowKey", workflowKey.upper())
+        if not workflow:
+            print("No workflow found with workflow " + workflowKey)
+            quit()
+
+        workflowID = workflow.WorkflowID
+        statusList = get_all_objects_from_list(self.statuses, "WorkflowID", workflowID)
+
+        statusList = sorted(statusList, key=lambda x: x.Seq)
+
+        return statusList
+
     def build_scenes(self) -> dict:
         for placement in self.placements:
             scene = self.createObjectListFromString(placement.LayoutData)
@@ -40,6 +54,7 @@ class WorkflowSceneManager:
     def buildScene(self, nodeList: list[Node], linkList: list[Link]):
         statuses: dict = {}
         workflows: dict = {}
+        workflowStatuses: dict = {} # This is so ineffecient it should be illegal
         links: dict = {}
         linkPoints: list[tuple] = []
 
@@ -55,6 +70,11 @@ class WorkflowSceneManager:
                     _ign = input("Error: node key already in workflows dict")
 
                 workflows[node.nodeAttribs["LayoutNode"]["Key"]] = node
+                # Again - shamefully innefficent. This info should be fiugred
+                # once and stored somewhere differently
+                if node.nodeAttribs["LayoutNode"]["Key"] not in workflowStatuses:
+                    statusList = self.getStatusSequence(node.nodeAttribs["LayoutNode"]["Key"])
+                    workflowStatuses[node.nodeAttribs["LayoutNode"]["Key"]] = statusList
 
             else:
                 _ign = input("Warning: unknown node type:" + node.nodeAtrribs["LayoutNode"]["Type"])
@@ -149,6 +169,7 @@ class WorkflowSceneManager:
         returnObject = {
                 "statuses": statuses,
                 "workflows": workflows,
+                "workflowStatuses": workflowStatuses,
                 "links": links,
                 "linkPoints": linkPoints
                 }
