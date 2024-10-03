@@ -1,3 +1,5 @@
+from typing import Optional   
+
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QVBoxLayout
 
 from workflow_designer.wfd_window import WorkflowDesignerWindow
@@ -11,7 +13,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.workflow_window: WorkflowDesignerWindow = None
+        self.workflow_window: Optional[WorkflowDesignerWindow] = None
 
         self.setWindowTitle("Main Window")
         self.setGeometry(100, 100, _DEF_WIN_X, _DEF_WIN_Y)

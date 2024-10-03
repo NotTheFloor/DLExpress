@@ -7,8 +7,6 @@ from PySide6.QtCore import QPoint, QRect
 from .wfd_objects import Node
 from .wfd_utilities import drawArrow
 
-from doclink_py.sql.doclink_sql import DocLinkSQL
-
 _DEF_DW_SZ_X = 1400
 _DEF_DW_SZ_Y = 900
 _TITLE_OFFS_X = 5

@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QDialog, QSplitter, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel
 #from PySide6.QtGui import QLineEdit
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 
 from doclink_py.sql.doclink_sql import DocLinkSQLCredentials, DocLinkSQL
 

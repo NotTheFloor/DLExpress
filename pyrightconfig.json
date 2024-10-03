@@ -1,5 +1,9 @@
 {
     "venvPath": "./",
     "venv": "env",
-    "pythonPath": "./env/bin/python",
+    "exclude": [
+        "env",
+        "**/__pycache__",
+        "transactions.txt"
+    ]
 }
