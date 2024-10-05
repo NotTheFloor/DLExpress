@@ -33,34 +33,37 @@ class Link:
     linkProps: dict
     linkAttribs: dict[str, dict]
 
-class WFDClickableObject(QGraphicsItem, QObject):
+class MakeClickableMixin(QObject):
     clicked = Signal()
 
-    def __init__(self, *args, **kwargs):
-        QGraphicsItem.__init__(self, *args, **kwargs)
-        QObject.__init__(self)
-        self.setFlag(QGraphicsItem.ItemIsSelectable)
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
+    def makeClickable(self, item: QGraphicsItem):
+        item.setFlag(QGraphicsItem.ItemIsSelectable)
 
-class WFDClickableEllipse(QGraphicsEllipseItem, QObject):
+        originalMouseClickEvent = item.mousePressEvent
+
+        def clickableMousePressEvent(event):
+            if event.button() == Qt.LeftButton:
+                self.clicked.emit()
+
+            originalMouseClickEvent(event)
+
+        item.mousePressEvent = clickableMousePressEvent
+
+class WFDClickableEllipse(QGraphicsEllipseItem):
     clicked = Signal()
 
     def __init__(self, *args, **kwargs):
         QGraphicsEllipseItem.__init__(self, *args, **kwargs)
-        QObject.__init__(self)
 
         self.setBrush(QBrush(Qt.blue))
         self.setPen(QPen(Qt.black))
         self.setFlag(QGraphicsEllipseItem.ItemIsSelectable)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
+        self.clickableHandler = MakeClickableMixin()
+        self.clickableHandler.makeClickable(self)
 
     def shape(self):
         path = QPainterPath()
@@ -71,36 +74,27 @@ class WFDClickableEllipse(QGraphicsEllipseItem, QObject):
         ellipse_path = self.shape()
         return ellipse_path.contains(point)
 
-
-class WFDClickableRect(QGraphicsRectItem, QObject):
+class WFDClickableRect(QGraphicsRectItem):
     clicked = Signal()
 
     def __init__(self, *args, **kwargs):
         QGraphicsRectItem.__init__(self, *args, **kwargs)
-        QObject.__init__(self)
 
         self.setBrush(QBrush(Qt.blue))
         self.setPen(QPen(Qt.black))
         self.setFlag(QGraphicsRectItem.ItemIsSelectable)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
+        self.clickableHandler = MakeClickableMixin()
+        self.clickableHandler.makeClickable(self)
 
-class WFDClickableLine(QGraphicsLineItem, QObject):
-    clicked = Signal()
-
+class WFDClickableLine(QGraphicsLineItem):
     def __init__(self, *args, **kwargs):
         QGraphicsLineItem.__init__(self, *args, **kwargs)
-        QObject.__init__(self)
 
         #self.setBrush(QBrush(Qt.blue))
         self.setPen(QPen(Qt.black))
         self.setFlag(QGraphicsLineItem.ItemIsSelectable)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
+        self.clickableHandler = MakeClickableMixin()
+        self.clickableHandler.makeClickable(self)
 
