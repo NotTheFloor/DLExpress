@@ -47,14 +47,62 @@ class MakeClickableMixin(QObject):
         def clickableMousePressEvent(event):
             if event.button() == Qt.LeftButton:
                 self.clicked.emit()
+                print("Click even emmited")
 
             originalMouseClickEvent(event)
 
         item.mousePressEvent = clickableMousePressEvent
 
-class WFDClickableEllipse(QGraphicsEllipseItem):
-    clicked = Signal()
+class MakeMovableMixin(QObject):
+    pressed = Signal()
+    moved = Signal()
+    released = Signal()
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.moving = False
+        self.dx = 0
+        self.dy = 0
+
+    def makeMovable(self, item: QGraphicsItem):
+        item.setFlag(QGraphicsItem.ItemIsSelectable)
+
+        originalMousePressEvent = item.mousePressEvent
+        originalMouseMoveEvent = item.mouseMoveEvent
+        originalMouseReleaseEvent = item.mouseReleaseEvent
+
+        def clickableMousePressEvent(event):
+            if event.button() == Qt.LeftButton:
+                self.moving = True
+
+                self.dx = item.pos().x() - event.scenePos().x()
+                self.dy = item.pos().y() - event.scenePos().y()
+
+            originalMousePressEvent(event)
+
+        item.mousePressEvent = clickableMousePressEvent
+
+        def clickableMouseMoveEvent(event):
+            if self.moving:
+                item.setPos(event.scenePos().x() + self.dx, event.scenePos().y() + self.dy)
+                print(f"Item Pos:  {item.pos().x()}, {item.pos().y()}")
+                print(f"Mouse Pos: {event.scenePos().x()}, {event.scenePos().y()}")
+                print(f"Delta:     {self.dx}, {self.dy}\n")
+
+            originalMouseMoveEvent(event)
+
+        item.mouseMoveEvent = clickableMouseMoveEvent
+
+        def clickableMouseReleaseEvent(event):
+            if event.button() == Qt.LeftButton:
+                self.moving = False
+
+            originalMouseReleaseEvent(event)
+
+        item.mouseReleaseEvent = clickableMouseReleaseEvent
+
+class WFDClickableEllipse(QGraphicsEllipseItem):
     def __init__(self, *args, **kwargs):
         QGraphicsEllipseItem.__init__(self, *args, **kwargs)
 
@@ -62,8 +110,10 @@ class WFDClickableEllipse(QGraphicsEllipseItem):
         self.setPen(QPen(Qt.black))
         self.setFlag(QGraphicsEllipseItem.ItemIsSelectable)
 
-        self.clickableHandler = MakeClickableMixin()
-        self.clickableHandler.makeClickable(self)
+        #self.clickableHandler = MakeClickableMixin()
+        #self.clickableHandler.makeClickable(self)
+        self.clickableHandler = MakeMovableMixin()
+        self.clickableHandler.makeMovable(self)
 
     def shape(self):
         path = QPainterPath()
@@ -75,8 +125,6 @@ class WFDClickableEllipse(QGraphicsEllipseItem):
         return ellipse_path.contains(point)
 
 class WFDClickableRect(QGraphicsRectItem):
-    clicked = Signal()
-
     def __init__(self, *args, **kwargs):
         QGraphicsRectItem.__init__(self, *args, **kwargs)
 

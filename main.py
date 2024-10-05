@@ -1,3 +1,8 @@
+import os
+# The below is designed to fix/silence the debug output.. so far not working
+os.environ["QT_QPA_EGLFS_NO_TOUCH"] = "1"
+os.environ["QT_LOGGING_RULES"] = "qt.pointer.dispatch.debug=false"
+
 from typing import Optional   
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QVBoxLayout
