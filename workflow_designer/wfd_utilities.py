@@ -1,7 +1,8 @@
 import math
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QPainter, QPolygon, QPolygonF
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsLineItem, QGraphicsPolygonItem
 
 # Inspired by https://forum.qt.io/topic/109749/how-to-create-an-arrow-in-qt/6
 # Probably worth converting all to Q primitives (QPointF, QLineF, etc.)
@@ -31,3 +32,29 @@ def drawArrow(painter: QPainter, srcPoint: tuple, dstPoint: tuple, headSize: int
         ]
     painter.drawPolygon(pointList, Qt.OddEvenFill)
     
+def addArrowToLineItem(graphicsItem: QGraphicsLineItem, headSize: int = 5):
+    x1 = graphicsItem.line().x1()
+    y1 = graphicsItem.line().y1()
+    x2 = graphicsItem.line().x2()
+    y2 = graphicsItem.line().y2()
+    #dx = graphicsItem.line().dx.
+    #dy = graphicsItem.line().dy
+    dx = x1 - x2
+    dy = y1 - y2
+
+    angle = math.atan2(-dy, dx)
+
+    arrowP1X = x2 + math.sin(angle + (math.pi / 3)) * headSize
+    arrowP1Y = y2 + math.cos(angle + (math.pi / 3)) * headSize
+    
+    arrowP2X = x2 + math.sin(angle + math.pi - (math.pi / 3)) * headSize
+    arrowP2Y = y2 + math.cos(angle + math.pi - (math.pi / 3)) * headSize
+
+    pointList = [
+            QPointF(x2, y2),
+            QPointF(arrowP1X, arrowP1Y),
+            QPointF(arrowP2X, arrowP2Y),
+        ]
+    
+    polygon = QPolygonF(pointList)
+    QGraphicsPolygonItem(polygon, graphicsItem)

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import Signal, QObject
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsRectItem
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPen, QBrush
+from PySide6.QtGui import QPainterPath, QPen, QBrush
 
 NODEPROPS = ['FillColor', 'TextColor', 'Text', 'LabelEdit', 'Alignment', 'DrawColor', 'Shadow']
 NODEATTRIBS = ['Font', 'LayoutNode', 'Shape']
@@ -61,6 +61,16 @@ class WFDClickableEllipse(QGraphicsEllipseItem, QObject):
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
+
+    def shape(self):
+        path = QPainterPath()
+        path.addEllipse(self.rect())
+        return path
+
+    def contains(self, point):
+        ellipse_path = self.shape()
+        return ellipse_path.contains(point)
+
 
 class WFDClickableRect(QGraphicsRectItem, QObject):
     clicked = Signal()

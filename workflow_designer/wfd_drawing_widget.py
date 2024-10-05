@@ -1,6 +1,6 @@
 import random
 
-from PySide6.QtWidgets import QFrame
+from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout
 from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics
 from PySide6.QtCore import QPoint, QRect
 
@@ -21,11 +21,22 @@ class DrawingWidget(QFrame):
 
         self.setMinimumSize(_DEF_DW_SZ_X, _DEF_DW_SZ_Y)
 
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+
+        self.view = QGraphicsView()
+        layout.addWidget(self.view)
+
+        self.view.setScene(self.sceneDict[self.currentWorkflow])
+
+
     def change_workflow(self, wfTitle):
         self.currentWorkflow = wfTitle
-        self.update()
+        #self.update()
+        self.view.setScene(self.sceneDict[self.currentWorkflow])
 
-    def paintEvent(self, event):
+    def unused(self):
         painter = QPainter(self)
         pen = QPen(QColor(0, 0, 0), 2)
         painter.setPen(pen)

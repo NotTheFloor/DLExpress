@@ -3,11 +3,12 @@ import math
 from typing import Any 
 
 from workflow_designer.wfd_objects import Node, Link, Rect, NODEPROPS, NODEATTRIBS, LINKPROPS, LINKATTRIBS, WFDClickableRect, WFDClickableLine, WFDClickableEllipse
+from workflow_designer.wfd_utilities import addArrowToLineItem
 
 from doclink_py.doclink_types.workflows import Workflow, WorkflowActivity, WorkflowPlacement
 from doclink_py.doclink_types.doclink_type_utilities import *   
 
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import QGraphicsScene 
 
 class WorkflowSceneManager:
     def __init__(self, doclink):
@@ -51,16 +52,22 @@ class WorkflowSceneManager:
                 new_scene.addItem(rect)
 
             for stKey, status in scene["statuses"].items():
-                ellipse = WFDClickableEllipse(status.nodeRect.cx, status.nodeRect.cy, status.nodeRect.rx, status.nodeRect.ry)
+                ellipse = WFDClickableEllipse(status.nodeRect.cx-status.nodeRect.rx, status.nodeRect.cy-status.nodeRect.ry, status.nodeRect.rx*2, status.nodeRect.ry*2)
                 new_scene.addItem(ellipse)
 
             for i in range(1, len(scene["linkPoints"])):
+                if scene["linkPoints"][i][2]:
+                    continue
+
+                #Still gros
                 line = WFDClickableLine(
                         scene["linkPoints"][i-1][0],
                         scene["linkPoints"][i-1][1],
                         scene["linkPoints"][i][0],
                         scene["linkPoints"][i][1]
                     )
+                if i+1 >= len(scene["linkPoints"]) or scene["linkPoints"][i+1][2]:
+                    addArrowToLineItem(line)
                 new_scene.addItem(line)
 
             self.g_scenes[key] = new_scene
