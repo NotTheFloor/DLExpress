@@ -4,7 +4,6 @@ from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout
 from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics
 from PySide6.QtCore import QPoint, QRect
 
-from .wfd_objects import Node
 from .wfd_utilities import drawArrow
 
 _DEF_DW_SZ_X = 1400

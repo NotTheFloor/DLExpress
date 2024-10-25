@@ -21,7 +21,7 @@ class WorkflowDesignerWindow(QDialog):
         self.setGeometry(150, 150, _DEF_WDW_SZ_X, _DEF_WDW_SZ_Y)
 
         scene_manager = WorkflowSceneManager(doclink)
-        sceneDict = scene_manager.g_scenes #scene_manager.build_scenes()
+        sceneDict = scene_manager.graphicScenes #scene_manager.build_scenes()
 
         main_splitter = QSplitter(Qt.Horizontal)
 

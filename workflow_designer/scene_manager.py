@@ -1,9 +1,10 @@
-import xml.etree.ElementTree as ET
 import math
 from typing import Any 
 
-from workflow_designer.wfd_objects import Node, Link, Rect, NODEPROPS, NODEATTRIBS, LINKPROPS, LINKATTRIBS, WFDClickableRect, WFDClickableLine, WFDClickableEllipse
+from workflow_designer.wfd_objects import Node, Link, Rect, NODEPROPS, NODEATTRIBS, LINKPROPS, LINKATTRIBS, WFDClickableRect, WFDClickableLine, WFDClickableEllipse, WFDLineSegments
+from workflow_designer.wfd_scene import WFDScene, WFScene
 from workflow_designer.wfd_utilities import addArrowToLineItem
+from workflow_designer.wfd_xml import createObjectListFromXMLString
 
 from doclink_py.doclink_types.workflows import Workflow, WorkflowActivity, WorkflowPlacement
 from doclink_py.doclink_types.doclink_type_utilities import *   
@@ -22,13 +23,16 @@ class WorkflowSceneManager:
         self.placements: list[WorkflowPlacement] = []
         self.placements = doclink.get_workflow_placements()
 
-        self.scenes: dict[str, Any] = {}
-        self.g_scenes: dict[str, Any] = {}
+        self.scenes: dict[str, WFDScene] = {}
+        self.graphicScenes: dict[str, Any] = {}
 
-        self.build_scenes()
-        self.build_g_scenes()
+        self.newScenes: list[WFScene] = []
+
+        self.createScenes()
+        self.buildGraphicsScenes()
 
     def getStatusSequence(self, workflowKey: str) -> list:
+        """Gets all statuses from a workflow sorted by suequence numbers"""
 
         workflow = get_object_from_list(self.workflows, "WorkflowKey", workflowKey.upper())
         if not workflow:
@@ -42,57 +46,77 @@ class WorkflowSceneManager:
 
         return statusList
 
-    def build_g_scenes(self):
+    def buildGraphicsScenes(self):
+        for scene in self.newScenes:
+            new_scene = QGraphicsScene()
+
+            for wf in scene.workflows:
+                new_scene.addItem(wf.shape.graphicsItem)
+                
+            for st in scene.statuses:
+                new_scene.addItem(st.shape.graphicsItem)
+
+            self.graphicScenes[str(scene.sceneWorkflow.WorkflowKey)] = new_scene
+        return
+
         for key, scene in self.scenes.items():
             new_scene = QGraphicsScene()
-            # Next step is creating the graphics items
-            # Will need to focus on arrows or ignore breifly
-            for wfKey, workflow in scene["workflows"].items():
+
+            for wfKey, workflow in scene.workflows.items():
                 rect = WFDClickableRect(workflow.nodeRect.left, workflow.nodeRect.top, workflow.nodeRect.width, workflow.nodeRect.height)
                 new_scene.addItem(rect)
 
-            for stKey, status in scene["statuses"].items():
+            for stKey, status in scene.statuses.items():
                 ellipse = WFDClickableEllipse(status.nodeRect.cx-status.nodeRect.rx, status.nodeRect.cy-status.nodeRect.ry, status.nodeRect.rx*2, status.nodeRect.ry*2)
                 new_scene.addItem(ellipse)
 
-            for i in range(1, len(scene["linkPoints"])):
-                if scene["linkPoints"][i][2]:
-                    continue
+            for lineSegment in scene.points:
+                last_item = None
+                for line in lineSegment.lines:
+                    last_item = WFDClickableLine(
+                            line.start[0],
+                            line.start[1],
+                            line.end[0],
+                            line.end[1]
+                        )
+                    new_scene.addItem(last_item)
+                if last_item is None:
+                    print("ERROR: no points in scene")
+                    quit()
+                addArrowToLineItem(last_item)
 
-                #Still gros
-                line = WFDClickableLine(
-                        scene["linkPoints"][i-1][0],
-                        scene["linkPoints"][i-1][1],
-                        scene["linkPoints"][i][0],
-                        scene["linkPoints"][i][1]
-                    )
-                if i+1 >= len(scene["linkPoints"]) or scene["linkPoints"][i+1][2]:
-                    addArrowToLineItem(line)
-                new_scene.addItem(line)
 
-            self.g_scenes[key] = new_scene
+            self.graphicScenes[key] = new_scene
                 
 
-    def build_scenes(self) -> dict:
+    def createScenes(self) -> dict:
+        """Converts placement data into objects and in a dict with WF Title as key"""
+
         for placement in self.placements:
-            scene = self.createObjectListFromString(placement.LayoutData)
+            nodes, links = createObjectListFromXMLString(placement.LayoutData)
+
+            scene = self.buildScene(nodes, links)
             
             wf = get_object_from_list(self.workflows, "WorkflowID", placement.WorkflowID)
             if wf is None:
                 input("Error no such workflow from placement")
                 quit()
             
+            self.newScenes.append(WFScene(placement, wf))
             self.scenes[wf.Title] = scene
             
         return self.scenes
 
 
-    def buildScene(self, nodeList: list[Node], linkList: list[Link]) -> dict[str, Any]:
+    def buildScene(self, nodeList: list[Node], linkList: list[Link]) -> WFDScene:
+        """Constructs the scene dicts from node and link objects"""
+
         statuses: dict = {}
         workflows: dict = {}
         workflowStatuses: dict = {} # This is so ineffecient it should be illegal
         links: dict = {}
         linkPoints: list[tuple] = []
+        points: list[WFDLineSegments] = []
 
         for node in nodeList:
             if node.nodeAttribs["LayoutNode"]["Type"] == 'Status':
@@ -145,6 +169,10 @@ class WorkflowSceneManager:
 
             # Create line segments 
             # Source point
+            newSegment = []
+            startItem = str(link.linkAttribs["LayoutLink"]["OrgKey"]).upper()
+            endItem = str(link.linkAttribs["LayoutLink"]["DstKey"]).upper()
+
             x = orgNode.nodeRect.cx
             y = orgNode.nodeRect.cy
             nextX = dstNode.nodeRect.cx
@@ -172,11 +200,13 @@ class WorkflowSceneManager:
                 y = y - math.sin(lineAngle) * ellipseR
 
             linkPoints.append((x, y, True))
+            newSegment.append((x, y))
 
             # Mid points
             if 'Point' in link.linkAttribs:
                 for i in range(len(link.linkAttribs['Point'])):
                     linkPoints.append((float(link.linkAttribs['Point'][i]['X']), float(link.linkAttribs['Point'][i]['Y']), False))
+                    newSegment.append((x, y))
 
             # End points
             x = dstNode.nodeRect.cx
@@ -200,77 +230,17 @@ class WorkflowSceneManager:
                 y = y + math.sin(lineAngle) * ellipseR
 
             linkPoints.append((x, y, False))
+            newSegment.append((x, y))
 
+            points.append(WFDLineSegments(startItem, endItem, newSegment))
 
-        returnObject = {
-                "statuses": statuses,
-                "workflows": workflows,
-                "workflowStatuses": workflowStatuses,
-                "links": links,
-                "linkPoints": linkPoints
-                }
-
-        return returnObject
-
-    def createObjectListFromFile(self, filename: str) -> dict[str, Any]:
-        tree = ET.parse(filename)
-        root = tree.getroot()
-        return self.createObjectList(root)
-    
-    def createObjectListFromString(self, xmlString: str) -> dict[str, Any]:
-        root = ET.fromstring(xmlString)
-        return self.createObjectList(root)
-
-    def createObjectList(self, root) -> dict[str, Any]:
-
-        nodeList: list[Node] = []
-        linkList: list[Link] = []
-
-        for child in root:
-            if child.tag == 'Node':
-                nodeRect = Rect(
-                        float(child.attrib["Left"]),
-                        float(child.attrib["Top"]),
-                        float(child.attrib["Width"]),
-                        float(child.attrib["Height"])
-                        )
-
-                nodeProps = {}
-                nodeAttribs = {}
-                for subchild in child:
-                    if subchild.tag in NODEPROPS:
-                        nodeProps[subchild.tag] = subchild.text
-                    elif subchild.tag in NODEATTRIBS:
-                        nodeAttribs[subchild.tag] = subchild.attrib
-                    else:
-                        input("Unknown subchild.tag during node search: " + subchild.tag)
-
-                    #print(attrib.tag, attrib.attrib)
-
-                nodeList.append(Node(nodeRect, nodeProps, nodeAttribs))
-            elif child.tag == 'Link':
-                linkProps = {} 
-                linkAttribs = {} 
-
-                for subchild in child:
-                    if subchild.tag in LINKPROPS:
-                        linkProps[subchild.tag] = subchild.text
-                    elif subchild.tag in LINKATTRIBS:
-                        if subchild.tag == "Point":
-                            if subchild.tag not in linkAttribs:
-                                linkAttribs[subchild.tag] = []    
-                            linkAttribs[subchild.tag].append(subchild.attrib)
-                        else:
-                            linkAttribs[subchild.tag] = subchild.attrib
-                    else:
-                        input("Unknown subchild.tag during link search: " + subchild.tag)
-
-                linkList.append(Link(linkProps, linkAttribs))
-            elif child.tag == "Version":
-                continue
-            else:
-                input("Unkown child tag:" + child.tag)
-
-        return self.buildScene(nodeList, linkList)
+        return WFDScene(
+                statuses,
+                workflows,
+                workflowStatuses,
+                links,
+                linkPoints,
+                points
+            )
 
 

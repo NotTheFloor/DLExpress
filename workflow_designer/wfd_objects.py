@@ -79,6 +79,8 @@ class MakeMovableMixin(QObject):
                 self.dx = item.pos().x() - event.scenePos().x()
                 self.dy = item.pos().y() - event.scenePos().y()
 
+                self.pressed.emit()
+
             originalMousePressEvent(event)
 
         item.mousePressEvent = clickableMousePressEvent
@@ -86,9 +88,8 @@ class MakeMovableMixin(QObject):
         def clickableMouseMoveEvent(event):
             if self.moving:
                 item.setPos(event.scenePos().x() + self.dx, event.scenePos().y() + self.dy)
-                print(f"Item Pos:  {item.pos().x()}, {item.pos().y()}")
-                print(f"Mouse Pos: {event.scenePos().x()}, {event.scenePos().y()}")
-                print(f"Delta:     {self.dx}, {self.dy}\n")
+
+                self.moved.emit()
 
             originalMouseMoveEvent(event)
 
@@ -97,6 +98,8 @@ class MakeMovableMixin(QObject):
         def clickableMouseReleaseEvent(event):
             if event.button() == Qt.LeftButton:
                 self.moving = False
+
+                self.released.emit()
 
             originalMouseReleaseEvent(event)
 
@@ -114,6 +117,10 @@ class WFDClickableEllipse(QGraphicsEllipseItem):
         #self.clickableHandler.makeClickable(self)
         self.clickableHandler = MakeMovableMixin()
         self.clickableHandler.makeMovable(self)
+        self.clickableHandler.moved.connect(self.test)
+
+    def test(self):
+        print("test")
 
     def shape(self):
         path = QPainterPath()
@@ -135,6 +142,9 @@ class WFDClickableRect(QGraphicsRectItem):
         self.clickableHandler = MakeClickableMixin()
         self.clickableHandler.makeClickable(self)
 
+        self.clickableHandler = MakeMovableMixin()
+        self.clickableHandler.makeMovable(self)
+
 class WFDClickableLine(QGraphicsLineItem):
     def __init__(self, *args, **kwargs):
         QGraphicsLineItem.__init__(self, *args, **kwargs)
@@ -146,3 +156,22 @@ class WFDClickableLine(QGraphicsLineItem):
         self.clickableHandler = MakeClickableMixin()
         self.clickableHandler.makeClickable(self)
 
+class WFDLineSegments:
+    def __init__(self, startItem, endItem, points: list):
+        self.startItem = startItem
+        self.endItem = endItem
+
+        self.points = points
+
+        # Create lines using pairs, not last item is popped as it incomplete
+        # pair
+        self.lines = [WFDLine(points[0])]
+        for i in range(1, len(points)):
+            self.lines[-1].end = points[i]
+            self.lines.append(WFDLine(points[i]))
+        self.lines.pop()
+
+class WFDLine:
+    def __init__(self, start, end=None):
+        self.start = start
+        self.end = end
