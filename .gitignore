@@ -1,5 +1,5 @@
 # .gitignore
-*.bak
+*.bak*
 
 # Ignore system files
 .DS_Store

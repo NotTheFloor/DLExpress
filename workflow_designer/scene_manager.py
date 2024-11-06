@@ -20,6 +20,13 @@ class WorkflowSceneManager:
         self.statuses: list[WorkflowActivity]
         self.statuses = doclink.get_workflow_activities()
 
+        self.workflowStatuses: dict[str, list[str]] = {}
+        
+        for wfs in self.workflows:
+            self.workflowStatuses[str(wfs.WorkflowKey)] = [
+                    st.Title for st in self.getStatusSequence(str(wfs.WorkflowKey))
+                ]
+
         self.placements: list[WorkflowPlacement] = []
         self.placements = doclink.get_workflow_placements()
 
@@ -50,12 +57,14 @@ class WorkflowSceneManager:
         for scene in self.newScenes:
             new_scene = QGraphicsScene()
 
-            for wf in scene.workflows:
-                new_scene.addItem(wf.shape.graphicsItem)
+            for ent in scene.workflows + scene.statuses:
+                new_scene.addItem(ent.shape.graphicsItem)
                 
-            for st in scene.statuses:
-                new_scene.addItem(st.shape.graphicsItem)
-
+                # for textItem in ent.textItems:
+                    # print("About to add")
+                    # new_scene.addItem(textItem)
+                    # print("Added")
+                
             self.graphicScenes[str(scene.sceneWorkflow.WorkflowKey)] = new_scene
         return
 
@@ -93,17 +102,17 @@ class WorkflowSceneManager:
         """Converts placement data into objects and in a dict with WF Title as key"""
 
         for placement in self.placements:
-            nodes, links = createObjectListFromXMLString(placement.LayoutData)
-
-            scene = self.buildScene(nodes, links)
+            # nodes, links = createObjectListFromXMLString(placement.LayoutData)
+# 
+            # scene = self.buildScene(nodes, links)
             
             wf = get_object_from_list(self.workflows, "WorkflowID", placement.WorkflowID)
             if wf is None:
                 input("Error no such workflow from placement")
                 quit()
             
-            self.newScenes.append(WFScene(placement, wf))
-            self.scenes[wf.Title] = scene
+            self.newScenes.append(WFScene(placement, wf, self.workflowStatuses))
+            # self.scenes[wf.Title] = scene
             
         return self.scenes
 

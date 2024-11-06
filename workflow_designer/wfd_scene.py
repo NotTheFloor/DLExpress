@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, TypedDict
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem
 
 from doclink_py.doclink_types.doclink_type_utilities import get_object_from_list
@@ -31,6 +32,7 @@ class WFEntity:
         self.entityType: EntityType = entityType
 
         self.shape: Optional[Shape] = None
+        self.textItems: list[QGraphicsTextItem] = []
 
         self.sourceKeys: list = []
         self.destKeys: list = []
@@ -42,11 +44,17 @@ class WFWorkflow(WFEntity):
     def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect):
         super().__init__(entityKey, EntityType.WORKFLOW)
 
+        self.title = title
         self.statuses = statuses
-        self.statusItems: dict[str, QGraphicsTextItem] = {}
+        # self.statusItems: dict[str, QGraphicsTextItem] = {}
 
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeRect(rect)
+        
+        titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
+        titleItem.setDefaultTextColor(Qt.red)
+        # titleItem.setPos(0, 0)
+        self.textItems.append(titleItem)
 
 class WFStatus(WFEntity):
     def __init__(self, entityKey, title: str, rect: Rect):
@@ -58,9 +66,10 @@ class WFStatus(WFEntity):
         self.shape = ShapeEllipse(rect)
 
 class WFScene:
-    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow):
+    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, statusInfo: dict[str, list[str]]):
         self.sceneWorkflow: Workflow = sceneWorkflow
         self.dlPlacement: WorkflowPlacement = dlPlacement
+        self.statusInfo = statusInfo
 
         self.workflows: list[WFWorkflow] = [] 
         self.statuses: list[WFStatus] = [] 
@@ -88,12 +97,12 @@ class WFScene:
                 if get_object_from_list(self.workflows, "entityKey", nodeKey):
                     input("Error: node key already in workflows dict")
 
-                self.workflows.append(convertWorkflowFromXML(node))
+                self.workflows.append(convertWorkflowFromXML(node, self.statusInfo[nodeKey.upper()]))
 
                 # We need to add statusesç:w
 
             else:
-                input("Warning: unknown node type:" + node.nodeAtrribs["LayoutNode"]["Type"])
+                input("Warning: unknown node type:" + node.nodeAttribs["LayoutNode"]["Type"])
 
 @dataclass
 class WFDScene:
@@ -113,11 +122,11 @@ def convertStatusFromXML(node: Node) -> WFStatus:
         )
 
 
-def convertWorkflowFromXML(node: Node) -> WFWorkflow:
+def convertWorkflowFromXML(node: Node, statuses: list[str]) -> WFWorkflow:
     return WFWorkflow(
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeAttribs["LayoutNode"]["Tooltip"],
-            [],
+            statuses,
             node.nodeRect
         )
 
