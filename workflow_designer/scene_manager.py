@@ -9,7 +9,7 @@ from workflow_designer.wfd_xml import createObjectListFromXMLString
 from doclink_py.doclink_types.workflows import Workflow, WorkflowActivity, WorkflowPlacement
 from doclink_py.doclink_types.doclink_type_utilities import *   
 
-from PySide6.QtWidgets import QGraphicsScene 
+from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsTextItem 
 
 class WorkflowSceneManager:
     def __init__(self, doclink):
@@ -60,10 +60,11 @@ class WorkflowSceneManager:
             for ent in scene.workflows + scene.statuses:
                 new_scene.addItem(ent.shape.graphicsItem)
                 
-                # for textItem in ent.textItems:
-                    # print("About to add")
-                    # new_scene.addItem(textItem)
-                    # print("Added")
+                # This should NOT be needed. My assumption is this is a bug in
+                # Qt. Without this, the text will not be displayed (tested on
+                # MacOS). It will cause a warning as its already been added
+                for textItem in ent.textItems:
+                    new_scene.addItem(textItem)
                 
             self.graphicScenes[str(scene.sceneWorkflow.WorkflowKey)] = new_scene
         return

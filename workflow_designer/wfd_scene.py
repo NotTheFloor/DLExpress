@@ -53,7 +53,10 @@ class WFWorkflow(WFEntity):
         
         titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
         titleItem.setDefaultTextColor(Qt.red)
-        # titleItem.setPos(0, 0)
+        titleItem.setPos(10, 10)
+        self.shape.graphicsItem.setZValue(0)
+        titleItem.setZValue(2)
+
         self.textItems.append(titleItem)
 
 class WFStatus(WFEntity):
@@ -64,6 +67,13 @@ class WFStatus(WFEntity):
 
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeEllipse(rect)
+
+        titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
+        titleItem.setDefaultTextColor(Qt.red)
+        titleItem.setPos(10, 10)
+        self.shape.graphicsItem.setZValue(0)
+        titleItem.setZValue(2)
+        self.textItems.append(titleItem)
 
 class WFScene:
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, statusInfo: dict[str, list[str]]):

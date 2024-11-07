@@ -22,10 +22,6 @@ class ExtendedRect(QGraphicsRectItem):
             
         return super().itemChange(change, value)
 
-class TestEllipse(QGraphicsEllipseItem):
-    def __init__(self, rect: Rect, wfdParent= None, *args, **kwargs):
-        super().__init__(rect.left, rect.top, rect.width, rect.height, *args, **kwargs)
-
 class ExtendedEllipse(QGraphicsEllipseItem):
     def __init__(self, rect: Rect, wfdParent=None, *args, **kwargs):
         super().__init__(0, 0, rect.width, rect.height, *args, **kwargs)
@@ -80,7 +76,7 @@ class ShapeRect(Shape):
         # self.graphicsItem.setPos(self.rect.left, self.rect.top)
 
         self.graphicsItem.setBrush(QBrush(Qt.blue))
-        self.graphicsItem.setPen(QPen(Qt.black))
+        self.graphicsItem.setPen(QPen(Qt.red))
 
 class ShapeEllipse(Shape):
     def __init__(self, rect: Rect, shapeParent=None, parent=None):
@@ -99,4 +95,4 @@ class ShapeEllipse(Shape):
         # self.graphicsItem.setPos(self.rect.left, self.rect.top)
 
         self.graphicsItem.setBrush(QBrush(Qt.blue))
-        self.graphicsItem.setPen(QPen(Qt.black))
+        self.graphicsItem.setPen(QPen(Qt.red))
