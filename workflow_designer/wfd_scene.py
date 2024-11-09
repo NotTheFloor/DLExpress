@@ -3,13 +3,19 @@ from enum import Enum
 from typing import Optional, TypedDict
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem
+from PySide6.QtGui import QFont, QFontMetrics, QPen
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem
 
 from doclink_py.doclink_types.doclink_type_utilities import get_object_from_list
 from doclink_py.doclink_types.workflows import Workflow, WorkflowPlacement
-from workflow_designer.wfd_objects import Link, Node, Rect, WFDLineSegments
+from workflow_designer.wfd_objects import Link, Node, Rect, WFDFont, WFDLineSegments
 from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeRect
 from workflow_designer.wfd_xml import createObjectListFromXMLString
+
+DEF_TTL_X_PAD = 1
+DEF_TTL_Y_PAD = 2
+DEF_ITM_X_PAD = 2
+DEF_ITM_Y_PAD = 2
 
 class EntityType(Enum):
     WORKFLOW = 1
@@ -19,6 +25,17 @@ class EntityType(Enum):
 class XMLObject(TypedDict):
     nodes: list[Node]
     links: list[Link]
+
+
+DEFAULT_FONT = WFDFont(
+            'Arial',
+            9.0,
+            False,
+            False,
+            False,
+            False
+        )
+
 
 class BaseWFNodeObject:
     def __init__(self):
@@ -41,7 +58,7 @@ class WFEntity:
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
-    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect):
+    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None):
         super().__init__(entityKey, EntityType.WORKFLOW)
 
         self.title = title
@@ -51,16 +68,19 @@ class WFWorkflow(WFEntity):
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeRect(rect)
         
+        # Create title
         titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
+        if titleFont:
+            titleItem.setFont(createFontFromWFDFont(titleFont))
         titleItem.setDefaultTextColor(Qt.red)
-        titleItem.setPos(10, 10)
+        titleItem.setPos(1, 1)
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
 
         self.textItems.append(titleItem)
 
 class WFStatus(WFEntity):
-    def __init__(self, entityKey, title: str, rect: Rect):
+    def __init__(self, entityKey, title: str, rect: Rect, titleFont: Optional[WFDFont] = None):
         super().__init__(entityKey, EntityType.STATUS)
 
         self.title = title
@@ -69,10 +89,28 @@ class WFStatus(WFEntity):
         self.shape = ShapeEllipse(rect)
 
         titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
+        
+        if titleFont:
+            titleItem.setFont(createFontFromWFDFont(titleFont))
         titleItem.setDefaultTextColor(Qt.red)
-        titleItem.setPos(10, 10)
+
+        metrics = QFontMetrics(titleItem.font())
+        dX = (rect.width / 2) - (metrics.horizontalAdvance(title) / 2)
+        dY = (rect.height / 2) - metrics.ascent() - (metrics.xHeight()/2)
+        print(metrics.height())
+        print(metrics.ascent())
+        print(metrics.descent())
+        titleItem.setPos(dX, dY)
+
+        horzLine1 = QGraphicsLineItem(0, 0, rect.width, 0, parent=self.shape.graphicsItem)
+        horzLine1.setPen(QPen(Qt.black))
+        horzLine2 = QGraphicsLineItem(0, rect.height/2, rect.width, rect.height/2, parent=self.shape.graphicsItem)
+        horzLine2.setPen(QPen(Qt.black))
+        horzLine3 = QGraphicsLineItem(0, rect.height, rect.width, rect.height, parent=self.shape.graphicsItem)
+        horzLine3.setPen(QPen(Qt.black))
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
+
         self.textItems.append(titleItem)
 
 class WFScene:
@@ -109,7 +147,7 @@ class WFScene:
 
                 self.workflows.append(convertWorkflowFromXML(node, self.statusInfo[nodeKey.upper()]))
 
-                # We need to add statusesç:w
+                # We need to add statuses
 
             else:
                 input("Warning: unknown node type:" + node.nodeAttribs["LayoutNode"]["Type"])
@@ -125,18 +163,34 @@ class WFDScene:
 
 # Needs to be implemented
 def convertStatusFromXML(node: Node) -> WFStatus:
+    font = DEFAULT_FONT
+    if 'Font' in node.nodeAttribs:
+        font = WFDFont(**node.nodeAttribs['Font'])
     return WFStatus(
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeProps["Text"],
-            node.nodeRect
+            node.nodeRect,
+            font
         )
 
 
 def convertWorkflowFromXML(node: Node, statuses: list[str]) -> WFWorkflow:
+    font = DEFAULT_FONT
+    if 'Font' in node.nodeAttribs:
+        font = WFDFont(**node.nodeAttribs['Font'])
     return WFWorkflow(
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeAttribs["LayoutNode"]["Tooltip"],
             statuses,
-            node.nodeRect
+            node.nodeRect,
+            font
         )
+
+def createFontFromWFDFont(wfdFont):
+    font = QFont(wfdFont.Name, int(round(float(wfdFont.Size))))
+    font.setBold(wfdFont.Bold=='True')
+    font.setItalic(wfdFont.Italic=='True')
+    font.setUnderline(wfdFont.Underline=='True')
+    font.setStrikeOut(wfdFont.Strikeout=='True')
+    return font
 

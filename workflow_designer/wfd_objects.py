@@ -22,6 +22,15 @@ class Rect:
         self.cx = left + self.rx
         self.cy = top + self.ry
 
+## Typical Node for a Status (For some stupid fucking reason WF are different)
+## P.S. we know the reason
+#   nodeProps={'FillColor': '-4144960', 'TextColor': '-16777216', 'Text': 'Unprocessed'}, 
+#   nodeAttribs={
+#       'Font': {'Name': 'Microsoft Sans Serif', 'Size': '8.25', 'Bold': 'True', 
+#           'Italic': 'False', 'Strikeout': 'False', 'Underline': 'False'},
+#       'LayoutNode': {'Key': '6539ec3e-1494-4da2-ab3d-7c96ed9fce3f', 
+#           'Type': 'Status', 'CanDelete': 'True', 'WorkflowKey': 'efd1febf-7596-4f63-a731-c9b6df41a72c', 
+#           'IsHidden': 'False', 'IsDefault': 'True', 'Class': 'StatusLayoutNode'}})
 @dataclass
 class Node:
     nodeRect: Rect
@@ -32,6 +41,16 @@ class Node:
 class Link:
     linkProps: dict
     linkAttribs: dict[str, dict]
+
+# Slight issue here where everything is actually being passed as a string oh no!
+@dataclass
+class WFDFont:
+    Name: str
+    Size: float
+    Bold: bool
+    Italic: bool
+    Strikeout: bool
+    Underline: bool
 
 class MakeClickableMixin(QObject):
     clicked = Signal()
