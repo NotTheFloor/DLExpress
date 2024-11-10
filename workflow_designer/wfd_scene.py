@@ -4,7 +4,7 @@ from typing import Optional, TypedDict
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QFontMetrics, QPen
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 
 from doclink_py.doclink_types.doclink_type_utilities import get_object_from_list
 from doclink_py.doclink_types.workflows import Workflow, WorkflowPlacement
@@ -94,20 +94,11 @@ class WFStatus(WFEntity):
             titleItem.setFont(createFontFromWFDFont(titleFont))
         titleItem.setDefaultTextColor(Qt.red)
 
-        metrics = QFontMetrics(titleItem.font())
-        dX = (rect.width / 2) - (metrics.horizontalAdvance(title) / 2)
-        dY = (rect.height / 2) - metrics.ascent() - (metrics.xHeight()/2)
-        print(metrics.height())
-        print(metrics.ascent())
-        print(metrics.descent())
-        titleItem.setPos(dX, dY)
+        centerTextItem(titleItem, 
+                       self.shape.graphicsItem.boundingRect().width(),
+                       self.shape.graphicsItem.boundingRect().height())
 
-        horzLine1 = QGraphicsLineItem(0, 0, rect.width, 0, parent=self.shape.graphicsItem)
-        horzLine1.setPen(QPen(Qt.black))
-        horzLine2 = QGraphicsLineItem(0, rect.height/2, rect.width, rect.height/2, parent=self.shape.graphicsItem)
-        horzLine2.setPen(QPen(Qt.black))
-        horzLine3 = QGraphicsLineItem(0, rect.height, rect.width, rect.height, parent=self.shape.graphicsItem)
-        horzLine3.setPen(QPen(Qt.black))
+
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
 
@@ -194,3 +185,10 @@ def createFontFromWFDFont(wfdFont):
     font.setStrikeOut(wfdFont.Strikeout=='True')
     return font
 
+def centerTextItem(textItem: QGraphicsTextItem, width, height):
+    metrics = QFontMetrics(textItem.font())
+    xPadding = (textItem.boundingRect().width() - metrics.horizontalAdvance(textItem.toPlainText())) / 2
+    yPadding = (textItem.boundingRect().height() - metrics.height()) / 2
+    dX = (width / 2) - (metrics.horizontalAdvance(textItem.toPlainText()) / 2) - xPadding
+    dY = (height / 2) - (metrics.height() / 2) - yPadding #- metrics.ascent() - (metrics.xHeight()/2)
+    textItem.setPos(dX, dY)
