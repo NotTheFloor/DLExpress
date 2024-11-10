@@ -73,11 +73,24 @@ class WFWorkflow(WFEntity):
         if titleFont:
             titleItem.setFont(createFontFromWFDFont(titleFont))
         titleItem.setDefaultTextColor(Qt.red)
-        titleItem.setPos(1, 1)
+        titleItem.setPos(0, 0)
+        self.textItems.append(titleItem)
+        yPadding = (titleItem.boundingRect().height() - QFontMetrics(titleItem.font()).height()) / 2
+
+        for i, statusLine in enumerate(self.statuses):
+            statusItem = QGraphicsTextItem(statusLine, parent=self.shape.graphicsItem)
+
+            if titleFont:
+                statusItem.setFont(createFontFromWFDFont(titleFont))
+
+            statusItem.setPos(DEF_ITM_X_PAD, (titleItem.boundingRect().height() - yPadding) * (i+1))
+            statusItem.setZValue(2)
+            
+            self.textItems.append(statusItem)
+
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
 
-        self.textItems.append(titleItem)
 
 class WFStatus(WFEntity):
     def __init__(self, entityKey, title: str, rect: Rect, titleFont: Optional[WFDFont] = None):
