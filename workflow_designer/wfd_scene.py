@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QFontMetrics, QPen
@@ -8,9 +8,14 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineIte
 
 from doclink_py.doclink_types.doclink_type_utilities import get_object_from_list
 from doclink_py.doclink_types.workflows import Workflow, WorkflowPlacement
+
 from workflow_designer.wfd_objects import Link, Node, Rect, WFDFont, WFDLineSegments
-from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeRect
+from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeLine, ShapeRect
+from workflow_designer.wfd_utilities import addArrowToLineItem
 from workflow_designer.wfd_xml import createObjectListFromXMLString
+
+if TYPE_CHECKING:
+    from workflow_designer.scene_manager import WorkflowSceneManager
 
 DEF_TTL_X_PAD = 1
 DEF_TTL_Y_PAD = 2
@@ -117,14 +122,36 @@ class WFStatus(WFEntity):
 
         self.textItems.append(titleItem)
 
+class WFLineGroup:
+    def __init__(self, srcEntity: WFEntity, dstEntity: WFEntity, pointList: list[tuple[float, float]] = []):
+        self.srcEntity = srcEntity
+        self.dstEntity = dstEntity
+        self.pointList = pointList
+
+        self.lineSegments: list[ShapeLine] = []
+
+        # input(f"A line: ({srcEntity.shape.rect.cx}, {srcEntity.shape.rect.cy})")
+
+        newLine = ShapeLine(
+                srcEntity.shape.rect.cx, 
+                srcEntity.shape.rect.cy, 
+                dstEntity.shape.rect.cx, 
+                dstEntity.shape.rect.cy, 
+                self
+            )
+        # input(f"A line: ({newLine.graphicsItem.shape.}, {srcEntity.shape.rect.cy})")
+        self.lineSegments.append(newLine)
+        self.lineSegments.append(addArrowToLineItem(self.lineSegments[-1].graphicsItem))
+
 class WFScene:
-    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, statusInfo: dict[str, list[str]]):
+    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
         self.sceneWorkflow: Workflow = sceneWorkflow
         self.dlPlacement: WorkflowPlacement = dlPlacement
-        self.statusInfo = statusInfo
+        self.sceneManager = sceneManager
 
         self.workflows: list[WFWorkflow] = [] 
         self.statuses: list[WFStatus] = [] 
+        self.lines: list[WFLineGroup] = []
 
         nodes, links = createObjectListFromXMLString(self.dlPlacement.LayoutData)
         self.xmlObjects: XMLObject = { 
@@ -133,6 +160,19 @@ class WFScene:
             }
 
         self.createEntitiesFromXML()
+
+    def getWorkflowByKey(self, key) -> Optional[WFWorkflow]:
+        return get_object_from_list(self.workflows, "entityKey", key)
+
+    def getStatusByKey(self, key) -> Optional[WFStatus]:
+        return get_object_from_list(self.statuses, "entityKey", key)
+
+    def getEntityByKey(self, key) -> Optional[WFEntity]:
+        foundStatus = self.getStatusByKey(key)
+        if foundStatus:
+            return foundStatus
+
+        return self.getWorkflowByKey(key)
 
     def createEntitiesFromXML(self):
         for node in self.xmlObjects['nodes']:
@@ -149,12 +189,47 @@ class WFScene:
                 if get_object_from_list(self.workflows, "entityKey", nodeKey):
                     input("Error: node key already in workflows dict")
 
-                self.workflows.append(convertWorkflowFromXML(node, self.statusInfo[nodeKey.upper()]))
+                self.workflows.append(convertWorkflowFromXML(node, self.sceneManager.workflowStatuses[nodeKey.upper()]))
 
                 # We need to add statuses
 
             else:
                 input("Warning: unknown node type:" + node.nodeAttribs["LayoutNode"]["Type"])
+
+
+        for link in self.xmlObjects['links']:
+            orgKey = link.linkAttribs["LayoutLink"]["OrgKey"]
+            dstKey = link.linkAttribs["LayoutLink"]["DstKey"]
+            orgEntity = self.getEntityByKey(orgKey)
+            dstEntity = self.getEntityByKey(dstKey)
+
+            if orgEntity is None:
+                wfActivity = get_object_from_list(self.sceneManager.statuses, "WorkflowActivityKey", str(orgKey).upper())
+                if wfActivity:
+                    orgEntity = self.getWorkflowByKey(
+                        str(get_object_from_list(
+                            self.sceneManager.workflows, 
+                            "WorkflowID", 
+                            wfActivity.WorkflowID
+                        ).WorkflowKey).lower())
+                
+            if dstEntity is None:
+                wfActivity = get_object_from_list(self.sceneManager.statuses, "WorkflowActivityKey", str(dstKey).upper())
+                if wfActivity:
+                    dstEntity = self.getWorkflowByKey(
+                        str(get_object_from_list(
+                            self.sceneManager.workflows, 
+                            "WorkflowID", 
+                            wfActivity.WorkflowID
+                        ).WorkflowKey).lower())
+
+            
+            if orgEntity is None or dstEntity is None:
+                print("Error orgNode or dstNode is None")
+                quit()
+
+            self.lines.append(WFLineGroup(orgEntity, dstEntity))
+
 
 @dataclass
 class WFDScene:

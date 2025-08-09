@@ -1,9 +1,11 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QPainterPath, QPen
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsObject, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsObject, QGraphicsRectItem, QGraphicsLineItem
+from shiboken6 import Object
 
 from workflow_designer.wfd_objects import Rect
+
 
 class ExtendedRect(QGraphicsRectItem):
     def __init__(self, rect: Rect, wfdParent=None, *args, **kwargs):
@@ -96,3 +98,73 @@ class ShapeEllipse(Shape):
 
         self.graphicsItem.setBrush(QBrush(Qt.blue))
         self.graphicsItem.setPen(QPen(Qt.red))
+
+
+
+class ShapeLine(QObject):
+    moved = Signal(QPointF)
+
+    def __init__(self, oX, oY, dX, dY, lineGroupParent=None, parent=None):
+        self.lineGroupParent = lineGroupParent
+
+        self.graphicsItem = ExtendedLine(
+                oX, oY, dX, dY,
+                wfdParent=self,
+                parent=parent
+            )
+        self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
+        self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+
+        # self.graphicsItem.setPos(self.rect.left, self.rect.top)
+
+        # self.graphicsItem.setBrush(QBrush(Qt.blue))
+        self.graphicsItem.setPen(QPen(Qt.red))
+    
+    def wfdItemChange(self, change, value):
+        self.moved.emit(value)
+
+class ExtendedArrow(QGraphicsLineItem):
+    def __init__(self, oX, oY, dX, dY, wfdParent=None, *args, **kwargs):
+        super().__init__(oX, oY, dX, dY, *args, **kwargs)
+
+        self.wfdParent = wfdParent 
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            self.wfdParent.wfdItemChange(change, value)
+            
+        return super().itemChange(change, value)
+
+class ShapeArrow(QObject):
+    moved = Signal(QPointF)
+
+    def __init__(self, oX, oY, dX, dY, lineGroupParent=None, parent=None):
+        self.lineGroupParent = lineGroupParent
+
+        self.graphicsItem = ExtendedLine(
+                oX, oY, dX, dY,
+                wfdParent=self,
+                parent=parent
+            )
+        self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
+        self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+
+        # self.graphicsItem.setPos(self.rect.left, self.rect.top)
+
+        # self.graphicsItem.setBrush(QBrush(Qt.blue))
+        self.graphicsItem.setPen(QPen(Qt.red))
+    
+    def wfdItemChange(self, change, value):
+        self.moved.emit(value)
+
+class ExtendedLine(QGraphicsLineItem):
+    def __init__(self, oX, oY, dX, dY, wfdParent=None, *args, **kwargs):
+        super().__init__(oX, oY, dX, dY, *args, **kwargs)
+
+        self.wfdParent = wfdParent 
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange:
+            self.wfdParent.wfdItemChange(change, value)
+            
+        return super().itemChange(change, value)

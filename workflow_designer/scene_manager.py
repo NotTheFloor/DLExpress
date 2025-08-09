@@ -65,6 +65,10 @@ class WorkflowSceneManager:
                 # MacOS). It will cause a warning as its already been added
                 for textItem in ent.textItems:
                     new_scene.addItem(textItem)
+            
+            for line in scene.lines:
+                for lineSeg in line.lineSegments:
+                    new_scene.addItem(lineSeg.graphicsItem)
                 
             self.graphicScenes[str(scene.sceneWorkflow.WorkflowKey)] = new_scene
         return
@@ -112,7 +116,7 @@ class WorkflowSceneManager:
                 input("Error no such workflow from placement")
                 quit()
             
-            self.newScenes.append(WFScene(placement, wf, self.workflowStatuses))
+            self.newScenes.append(WFScene(placement, wf, self))
             # self.scenes[wf.Title] = scene
             
         return self.scenes

@@ -5,6 +5,8 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsEllipseIte
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainterPath, QPen, QBrush
 
+from workflow_designer.wfd_utilities import addArrowToLineItem
+
 NODEPROPS = ['FillColor', 'TextColor', 'Text', 'LabelEdit', 'Alignment', 'DrawColor', 'Shadow']
 NODEATTRIBS = ['Font', 'LayoutNode', 'Shape']
 LINKPROPS = ['DrawColor', 'Shadow', 'DashStyle']
