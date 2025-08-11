@@ -13,8 +13,7 @@ class ExtendedRect(QGraphicsRectItem):
         self.wfdParent = wfdParent
 
         if wfdParent is None:
-            print("wfdParent is none in Extended rect")
-            quit()
+            raise ValueError("wfdParent cannot be None in ExtendedRect")
 
         self.setPos(rect.left, rect.top)
 
@@ -30,8 +29,7 @@ class ExtendedEllipse(QGraphicsEllipseItem):
         self.wfdParent = wfdParent
 
         if wfdParent is None:
-            print("wfdParent is none in Extended ellipse")
-            quit()
+            raise ValueError("wfdParent cannot be None in ExtendedEllipse")
 
         self.setPos(rect.left, rect.top)
 
@@ -63,9 +61,8 @@ class Shape(QObject):
 
 
 class ShapeRect(Shape):
-    def __init__(self, rect: Rect, shapeParent=None, parent=None):
+    def __init__(self, rect: Rect, fillColor=None, drawColor=None, shapeParent=None, parent=None):
         super().__init__(rect, parent)
-
 
         self.graphicsItem = ExtendedRect(
                 rect=rect,
@@ -75,29 +72,40 @@ class ShapeRect(Shape):
         self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
         self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 
-        # self.graphicsItem.setPos(self.rect.left, self.rect.top)
-
-        self.graphicsItem.setBrush(QBrush(Qt.blue))
-        self.graphicsItem.setPen(QPen(Qt.red))
+        # Apply colors if provided
+        if fillColor:
+            self.graphicsItem.setBrush(QBrush(fillColor))
+        else:
+            self.graphicsItem.setBrush(QBrush(Qt.lightGray))
+            
+        if drawColor:
+            self.graphicsItem.setPen(QPen(drawColor, 2))
+        else:
+            self.graphicsItem.setPen(QPen(Qt.black, 2))
 
 class ShapeEllipse(Shape):
-    def __init__(self, rect: Rect, shapeParent=None, parent=None):
+    def __init__(self, rect: Rect, fillColor=None, drawColor=None, shapeParent=None, parent=None):
         super().__init__(rect, parent)
 
-        # self.graphicsItem = QGraphicsEllipseItem(rect.left, rect.top, rect.width, rect.height, parent)
         self.graphicsItem = ExtendedEllipse(
                 rect=rect,
                 wfdParent=self,
                 parent=shapeParent
             )
-        # self.graphicsItem = TestEllipse(rect, wfdParent=None, parent=None)
         
         self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
         self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
-        # self.graphicsItem.setPos(self.rect.left, self.rect.top)
 
-        self.graphicsItem.setBrush(QBrush(Qt.blue))
-        self.graphicsItem.setPen(QPen(Qt.red))
+        # Apply colors if provided
+        if fillColor:
+            self.graphicsItem.setBrush(QBrush(fillColor))
+        else:
+            self.graphicsItem.setBrush(QBrush(Qt.lightGray))
+            
+        if drawColor:
+            self.graphicsItem.setPen(QPen(drawColor, 2))
+        else:
+            self.graphicsItem.setPen(QPen(Qt.black, 2))
 
 
 

@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional, TypedDict, TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QFontMetrics, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 
 from doclink_py.models.doclink_type_utilities import get_object_from_list
@@ -63,15 +63,14 @@ class WFEntity:
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
-    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None):
+    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None):
         super().__init__(entityKey, EntityType.WORKFLOW)
 
         self.title = title
         self.statuses = statuses
-        # self.statusItems: dict[str, QGraphicsTextItem] = {}
 
         # This should read off nodeRect info to determine if square or circle
-        self.shape = ShapeRect(rect)
+        self.shape = ShapeRect(rect, fillColor=fillColor, drawColor=drawColor)
         
         # Create title
         titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
@@ -98,13 +97,13 @@ class WFWorkflow(WFEntity):
 
 
 class WFStatus(WFEntity):
-    def __init__(self, entityKey, title: str, rect: Rect, titleFont: Optional[WFDFont] = None):
+    def __init__(self, entityKey, title: str, rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None):
         super().__init__(entityKey, EntityType.STATUS)
 
         self.title = title
 
         # This should read off nodeRect info to determine if square or circle
-        self.shape = ShapeEllipse(rect)
+        self.shape = ShapeEllipse(rect, fillColor=fillColor, drawColor=drawColor)
 
         titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
         
@@ -139,9 +138,10 @@ class WFLineGroup:
                 dstEntity.shape.rect.cy, 
                 self
             )
-        # input(f"A line: ({newLine.graphicsItem.shape.}, {srcEntity.shape.rect.cy})")
         self.lineSegments.append(newLine)
-        self.lineSegments.append(addArrowToLineItem(self.lineSegments[-1].graphicsItem))
+        # Add arrow as raw Qt item (QGraphicsPolygonItem)
+        arrowItem = addArrowToLineItem(self.lineSegments[-1].graphicsItem)
+        self.lineSegments.append(arrowItem)
 
 class WFScene:
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
@@ -180,21 +180,21 @@ class WFScene:
 
             if node.nodeAttribs["LayoutNode"]["Type"] == 'Status':
                 if get_object_from_list(self.statuses, "entityKey", nodeKey):
-                    input("Error: node key already in statuses dict")
+                    raise ValueError(f"Duplicate node key in statuses: {nodeKey}")
 
                 # Needs to be implemented
                 self.statuses.append(convertStatusFromXML(node))
 
             elif node.nodeAttribs["LayoutNode"]["Type"] == 'Workflow':
                 if get_object_from_list(self.workflows, "entityKey", nodeKey):
-                    input("Error: node key already in workflows dict")
+                    raise ValueError(f"Duplicate node key in workflows: {nodeKey}")
 
                 self.workflows.append(convertWorkflowFromXML(node, self.sceneManager.workflowStatuses[nodeKey.upper()]))
 
                 # We need to add statuses
 
             else:
-                input("Warning: unknown node type:" + node.nodeAttribs["LayoutNode"]["Type"])
+                raise ValueError(f"Unknown node type: {node.nodeAttribs['LayoutNode']['Type']}")
 
 
         for link in self.xmlObjects['links']:
@@ -225,8 +225,7 @@ class WFScene:
 
             
             if orgEntity is None or dstEntity is None:
-                print("Error orgNode or dstNode is None")
-                quit()
+                raise ValueError(f"Invalid link entities: orgEntity={orgEntity}, dstEntity={dstEntity}")
 
             self.lines.append(WFLineGroup(orgEntity, dstEntity))
 
@@ -245,11 +244,23 @@ def convertStatusFromXML(node: Node) -> WFStatus:
     font = DEFAULT_FONT
     if 'Font' in node.nodeAttribs:
         font = WFDFont(**node.nodeAttribs['Font'])
+    
+    # Extract colors from XML
+    fillColor = None
+    if 'FillColor' in node.nodeProps:
+        fillColor = parseXmlColor(node.nodeProps['FillColor'])
+    
+    drawColor = None  
+    if 'DrawColor' in node.nodeProps:
+        drawColor = parseXmlColor(node.nodeProps['DrawColor'])
+    
     return WFStatus(
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeProps["Text"],
             node.nodeRect,
-            font
+            font,
+            fillColor=fillColor,
+            drawColor=drawColor
         )
 
 
@@ -257,12 +268,24 @@ def convertWorkflowFromXML(node: Node, statuses: list[str]) -> WFWorkflow:
     font = DEFAULT_FONT
     if 'Font' in node.nodeAttribs:
         font = WFDFont(**node.nodeAttribs['Font'])
+    
+    # Extract colors from XML
+    fillColor = None
+    if 'FillColor' in node.nodeProps:
+        fillColor = parseXmlColor(node.nodeProps['FillColor'])
+    
+    drawColor = None
+    if 'DrawColor' in node.nodeProps:
+        drawColor = parseXmlColor(node.nodeProps['DrawColor'])
+        
     return WFWorkflow(
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeAttribs["LayoutNode"]["Tooltip"],
             statuses,
             node.nodeRect,
-            font
+            font,
+            fillColor=fillColor,
+            drawColor=drawColor
         )
 
 def createFontFromWFDFont(wfdFont):
@@ -280,3 +303,22 @@ def centerTextItem(textItem: QGraphicsTextItem, width, height):
     dX = (width / 2) - (metrics.horizontalAdvance(textItem.toPlainText()) / 2) - xPadding
     dY = (height / 2) - (metrics.height() / 2) - yPadding #- metrics.ascent() - (metrics.xHeight()/2)
     textItem.setPos(dX, dY)
+
+def parseXmlColor(colorStr: str) -> QColor:
+    """Convert XML color string (like '-1', '-16777216') to QColor"""
+    try:
+        colorInt = int(colorStr)
+        if colorInt == -1:
+            return QColor(Qt.white)
+        elif colorInt == -16777216:
+            return QColor(Qt.black)
+        else:
+            # Convert from signed 32-bit int to RGB
+            if colorInt < 0:
+                colorInt = colorInt + 2**32
+            r = (colorInt >> 16) & 0xFF
+            g = (colorInt >> 8) & 0xFF  
+            b = colorInt & 0xFF
+            return QColor(r, g, b)
+    except ValueError:
+        return QColor(Qt.gray)

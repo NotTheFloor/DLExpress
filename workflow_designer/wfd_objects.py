@@ -163,8 +163,8 @@ class WFDClickableRect(QGraphicsRectItem):
         self.clickableHandler = MakeClickableMixin()
         self.clickableHandler.makeClickable(self)
 
-        self.clickableHandler = MakeMovableMixin()
-        self.clickableHandler.makeMovable(self)
+        self.movableHandler = MakeMovableMixin()
+        self.movableHandler.makeMovable(self)
 
 class WFDClickableLine(QGraphicsLineItem):
     def __init__(self, *args, **kwargs):
