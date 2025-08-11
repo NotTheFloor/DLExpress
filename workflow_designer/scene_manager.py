@@ -6,8 +6,8 @@ from workflow_designer.wfd_scene import WFDScene, WFScene
 from workflow_designer.wfd_utilities import addArrowToLineItem
 from workflow_designer.wfd_xml import createObjectListFromXMLString
 
-from doclink_py.doclink_types.workflows import Workflow, WorkflowActivity, WorkflowPlacement
-from doclink_py.doclink_types.doclink_type_utilities import *   
+from doclink_py.models.workflows import Workflow, WorkflowActivity, WorkflowPlacement
+from doclink_py.models.doclink_type_utilities import *   
 
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsTextItem 
 
@@ -15,10 +15,10 @@ class WorkflowSceneManager:
     def __init__(self, doclink):
 
         self.workflows: list[Workflow] = []
-        self.workflows = doclink.get_workflows()
+        self.workflows = doclink.workflow_manager.get_workflows()
 
         self.statuses: list[WorkflowActivity]
-        self.statuses = doclink.get_workflow_activities()
+        self.statuses = doclink.workflow_manager.get_workflow_activities()
 
         self.workflowStatuses: dict[str, list[str]] = {}
         
@@ -28,7 +28,7 @@ class WorkflowSceneManager:
                 ]
 
         self.placements: list[WorkflowPlacement] = []
-        self.placements = doclink.get_workflow_placements()
+        self.placements = doclink.workflow_manager.get_workflow_placements()
 
         self.scenes: dict[str, WFDScene] = {}
         self.graphicScenes: dict[str, Any] = {}

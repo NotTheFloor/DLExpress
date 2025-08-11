@@ -2,12 +2,12 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QL
 #from PySide6.QtGui import QLineEdit
 from PySide6.QtCore import QTimer
 
-from doclink_py.sql.doclink_sql import DocLinkSQLCredentials, DocLinkSQL
+from doclink_py.sql.manager.doclink_manager import DoclinkManager, DocLinkSQLCredentials 
 
 _DEF_WDW_SZ_X = 400
 _DEF_WDW_SZ_Y = 400
 
-_DEF_SVR_NAME = "172.16.205.129" #"192.168.1.24"
+_DEF_SVR_NAME = "192.168.68.64" #"172.16.205.124" #"192.168.1.24"
 _DEF_DB_NAME = "doclink2"
 _DEF_USR_NAME = "sa"
 
@@ -76,7 +76,7 @@ class ConnectWindow(QDialog):
         self.setLayout(layout)
 
     def connect_action(self):
-        doclink = DocLinkSQL()
+        doclink = DoclinkManager()
         credentials = DocLinkSQLCredentials(
                 self.serverName_input.text(),
                 self.databaseName_input.text(),

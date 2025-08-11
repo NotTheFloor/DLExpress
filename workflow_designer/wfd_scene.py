@@ -6,8 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QFontMetrics, QPen
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 
-from doclink_py.doclink_types.doclink_type_utilities import get_object_from_list
-from doclink_py.doclink_types.workflows import Workflow, WorkflowPlacement
+from doclink_py.models.doclink_type_utilities import get_object_from_list
+from doclink_py.models.workflows import Workflow, WorkflowPlacement
 
 from workflow_designer.wfd_objects import Link, Node, Rect, WFDFont, WFDLineSegments
 from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeLine, ShapeRect

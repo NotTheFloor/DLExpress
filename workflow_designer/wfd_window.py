@@ -5,8 +5,8 @@ from .wfd_drawing_widget import DrawingWidget
 from .wfd_objects import Node as WFN
 from .scene_manager import WorkflowSceneManager
 
-from doclink_py.sql.doclink_sql import DocLinkSQL
-from doclink_py.doclink_types.workflows import Workflow
+from doclink_py.sql.manager.doclink_manager import DoclinkManager
+from doclink_py.models.workflows import Workflow
 
 _DEF_WDW_SZ_X = 1600
 _DEF_WDW_SZ_Y = 900
@@ -14,7 +14,7 @@ _DEF_T_RP_Y = 600
 _DEF_B_RP_Y = 300
 
 class WorkflowDesignerWindow(QDialog):
-    def __init__(self, doclink: DocLinkSQL):
+    def __init__(self, doclink: DoclinkManager):
         super().__init__()
 
         self.setWindowTitle("Workflow Designer")
