@@ -1,6 +1,6 @@
 from typing import Optional, TYPE_CHECKING, Tuple
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QPainterPath, QPen, QColor
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsObject, QGraphicsRectItem, QGraphicsLineItem
 from shiboken6 import Object
 
@@ -55,6 +55,11 @@ class Shape(QObject):
         self.moving = False
         self.dx = 0
         self.dy = 0
+        
+        # For selection
+        self._is_selected = False
+        self._original_pen: Optional[QPen] = None
+        self._original_brush: Optional[QBrush] = None
 
     def wfdItemChange(self, change, value):
         self.moved.emit(value)
@@ -74,6 +79,55 @@ class Shape(QObject):
         """Get current bounds (left, top, width, height) from graphics item position"""
         pos = self.graphicsItem.pos()
         return pos.x(), pos.y(), self.rect.width, self.rect.height
+    
+    def setSelected(self, selected: bool, selection_color: QColor):
+        """Set selection state with visual feedback"""
+        if self._is_selected == selected:
+            return
+            
+        self._is_selected = selected
+        
+        if selected:
+            # Store original appearance
+            if hasattr(self.graphicsItem, 'pen'):
+                self._original_pen = self.graphicsItem.pen()
+            if hasattr(self.graphicsItem, 'brush'):
+                self._original_brush = self.graphicsItem.brush()
+            
+            # Apply selection appearance
+            selection_pen = QPen(selection_color, 3)
+            if hasattr(self.graphicsItem, 'setPen'):
+                self.graphicsItem.setPen(selection_pen)
+        else:
+            # Restore original appearance
+            if self._original_pen and hasattr(self.graphicsItem, 'setPen'):
+                self.graphicsItem.setPen(self._original_pen)
+            if self._original_brush and hasattr(self.graphicsItem, 'setBrush'):
+                self.graphicsItem.setBrush(self._original_brush)
+                
+            self._original_pen = None
+            self._original_brush = None
+    
+    def isSelected(self) -> bool:
+        """Check if shape is currently selected"""
+        return self._is_selected
+    
+    def _setupClickHandling(self):
+        """Setup click event handling for graphics item"""
+        if not self.graphicsItem:
+            return
+            
+        # Store original mouse press event
+        original_mouse_press = self.graphicsItem.mousePressEvent
+        
+        def handle_mouse_press(event):
+            from PySide6.QtCore import Qt
+            if event.button() == Qt.LeftButton:
+                self.clicked.emit()
+            # Call original handler
+            original_mouse_press(event)
+            
+        self.graphicsItem.mousePressEvent = handle_mouse_press
 
 
 class ShapeRect(Shape):
@@ -87,6 +141,7 @@ class ShapeRect(Shape):
             )
         self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
         self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+        self.graphicsItem.setFlag(QGraphicsItem.ItemIsSelectable)
 
         # Apply colors if provided
         if fillColor:
@@ -98,6 +153,9 @@ class ShapeRect(Shape):
             self.graphicsItem.setPen(QPen(drawColor, 2))
         else:
             self.graphicsItem.setPen(QPen(Qt.black, 2))
+            
+        # Connect click events
+        self._setupClickHandling()
 
 class ShapeEllipse(Shape):
     def __init__(self, rect: Rect, fillColor=None, drawColor=None, shapeParent=None, parent=None):
@@ -111,6 +169,7 @@ class ShapeEllipse(Shape):
         
         self.graphicsItem.setFlag(QGraphicsItem.ItemIsMovable)
         self.graphicsItem.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+        self.graphicsItem.setFlag(QGraphicsItem.ItemIsSelectable)
 
         # Apply colors if provided
         if fillColor:
@@ -122,6 +181,9 @@ class ShapeEllipse(Shape):
             self.graphicsItem.setPen(QPen(drawColor, 2))
         else:
             self.graphicsItem.setPen(QPen(Qt.black, 2))
+            
+        # Connect click events
+        self._setupClickHandling()
 
 
 

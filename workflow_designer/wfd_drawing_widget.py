@@ -1,8 +1,8 @@
 import random
 
-from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout, QGraphicsScene
 from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QRect, Qt
 
 from .wfd_utilities import drawArrow
 
@@ -11,11 +11,35 @@ _DEF_DW_SZ_Y = 900
 _TITLE_OFFS_X = 5
 _TITLE_OFFS_Y = 12
 
+class CustomGraphicsView(QGraphicsView):
+    """Custom QGraphicsView that handles empty space clicks for deselection"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._wf_scene = None  # Reference to WFScene for selection manager access
+    
+    def set_wf_scene(self, wf_scene):
+        """Set the workflow scene reference for selection handling"""
+        self._wf_scene = wf_scene
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # Check if click is on empty space
+            item = self.itemAt(event.pos())
+            if item is None and self._wf_scene and hasattr(self._wf_scene, 'selection_manager'):
+                # Click on empty space - deselect all
+                self._wf_scene.selection_manager.deselect_all()
+        
+        # Call parent handler to maintain normal functionality
+        super().mousePressEvent(event)
+
+
 class DrawingWidget(QFrame):
-    def __init__(self, sceneDict: dict, parent=None):
+    def __init__(self, sceneDict: dict, sceneManagerDict: dict = None, parent=None):
         super().__init__(parent)
 
-        self.sceneDict: dict = sceneDict
+        self.sceneDict: dict = sceneDict  # Qt graphics scenes
+        self.sceneManagerDict: dict = sceneManagerDict or {}  # WFScene objects
         self.currentWorkflow = list(sceneDict.keys())[0]
 
         self.setMinimumSize(_DEF_DW_SZ_X, _DEF_DW_SZ_Y)
@@ -23,17 +47,24 @@ class DrawingWidget(QFrame):
         layout = QVBoxLayout(self)
         self.setLayout(layout)
 
-
-        self.view = QGraphicsView()
+        self.view = CustomGraphicsView()
         layout.addWidget(self.view)
 
         self.view.setScene(self.sceneDict[self.currentWorkflow])
+        
+        # Set the WFScene reference if available
+        if self.currentWorkflow in self.sceneManagerDict:
+            self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
 
 
     def change_workflow(self, wfTitle):
         self.currentWorkflow = wfTitle
         #self.update()
         self.view.setScene(self.sceneDict[self.currentWorkflow])
+        
+        # Update WFScene reference when switching workflows
+        if self.currentWorkflow in self.sceneManagerDict:
+            self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
 
     def unused(self):
         painter = QPainter(self)

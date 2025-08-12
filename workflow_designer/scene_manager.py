@@ -37,6 +37,7 @@ class WorkflowSceneManager:
 
             self.graphicScenes: dict[str, Any] = {}
             self.newScenes: list[WFScene] = []
+            self.wfSceneDict: dict[str, WFScene] = {}  # Map of WorkflowKey -> WFScene
 
             self.createScenes()
             self.buildGraphicsScenes()
@@ -115,7 +116,11 @@ class WorkflowSceneManager:
                         continue
                         
                     logger.debug(f"Creating scene for workflow {wf.Title}")
-                    self.newScenes.append(WFScene(placement, wf, self))
+                    wf_scene = WFScene(placement, wf, self)
+                    self.newScenes.append(wf_scene)
+                    # Store reference by WorkflowKey for later access
+                    scene_key = str(wf.WorkflowKey)
+                    self.wfSceneDict[scene_key] = wf_scene
                     
                 except Exception as e:
                     logger.error(f"Error creating scene for placement {placement.WorkflowID}: {e}")

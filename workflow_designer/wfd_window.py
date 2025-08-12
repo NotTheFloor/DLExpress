@@ -22,6 +22,7 @@ class WorkflowDesignerWindow(QDialog):
 
         scene_manager = WorkflowSceneManager(doclink)
         sceneDict = scene_manager.graphicScenes #scene_manager.build_scenes()
+        wfSceneDict = scene_manager.wfSceneDict
         
         # Create mapping from workflow titles to WorkflowKeys
         self.title_to_key_map = {}
@@ -32,7 +33,7 @@ class WorkflowDesignerWindow(QDialog):
 
         main_splitter = QSplitter(Qt.Horizontal)
 
-        self.drawing_area = DrawingWidget(sceneDict)
+        self.drawing_area = DrawingWidget(sceneDict, wfSceneDict)
         main_splitter.addWidget(self.drawing_area)
 
         right_pane = QSplitter(Qt.Vertical)

@@ -11,7 +11,8 @@ from doclink_py.models.workflows import Workflow, WorkflowPlacement
 
 from workflow_designer.wfd_objects import Link, Node, Rect, WFDFont, WFDLineSegments
 from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeLine, ShapeRect
-from workflow_designer.wfd_utilities import addArrowToLineItem, SmartArrow
+from workflow_designer.wfd_utilities import addArrowToLineItem, SmartArrow, MultiSegmentArrow
+from workflow_designer.wfd_selection_manager import SelectionManager
 from workflow_designer.wfd_xml import createObjectListFromXMLString
 
 if TYPE_CHECKING:
@@ -60,6 +61,22 @@ class WFEntity:
         self.destKeys: list = []
         self.sourceLines: list = []
         self.destLines: list = []
+        
+        # Selection manager will be set when entity is added to scene
+        self._selection_manager = None
+    
+    def set_selection_manager(self, selection_manager):
+        """Set the selection manager for this entity"""
+        self._selection_manager = selection_manager
+        
+        # Connect click events to selection
+        if self.shape:
+            self.shape.clicked.connect(lambda: self._handle_click())
+    
+    def _handle_click(self):
+        """Handle entity click - select this entity"""
+        if self._selection_manager:
+            self._selection_manager.select_item(self)
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
@@ -122,20 +139,50 @@ class WFStatus(WFEntity):
         self.textItems.append(titleItem)
 
 class WFLineGroup:
-    def __init__(self, srcEntity: WFEntity, dstEntity: WFEntity, pointList: list[tuple[float, float]] = []):
+    def __init__(self, srcEntity: WFEntity, dstEntity: WFEntity, linkData: Link = None):
         self.srcEntity = srcEntity
         self.dstEntity = dstEntity
-        self.pointList = pointList
+        self.linkData = linkData
 
         self.lineSegments: list = []  # Will contain both ShapeLine and graphics items
 
-        # Create smart arrow that handles both line and arrowhead dynamically
-        self.smartArrow = SmartArrow(srcEntity, dstEntity)
+        # Extract waypoints from XML Point elements
+        waypoints = self._extractWaypoints()
+
+        if waypoints:
+            # Create multi-segment arrow for complex paths
+            self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints)
+            # Add all graphics items from multi-segment arrow
+            self.lineSegments.extend(self.arrow.getGraphicsItems())
+        else:
+            # Create simple smart arrow for direct connections
+            self.arrow = SmartArrow(srcEntity, dstEntity)
+            # Add the graphics items from smart arrow
+            lineItem, arrowItem = self.arrow.getGraphicsItems()
+            self.lineSegments.append(lineItem)
+            self.lineSegments.append(arrowItem)
+    
+    def set_selection_manager(self, selection_manager):
+        """Set the selection manager for the arrow"""
+        if hasattr(self.arrow, 'set_selection_manager'):
+            self.arrow.set_selection_manager(selection_manager)
+    
+    def _extractWaypoints(self) -> list[tuple[float, float]]:
+        """Extract waypoint coordinates from XML Point elements"""
+        waypoints = []
         
-        # Add the graphics items from smart arrow to line segments for scene management
-        lineItem, arrowItem = self.smartArrow.getGraphicsItems()
-        self.lineSegments.append(lineItem)
-        self.lineSegments.append(arrowItem)
+        if self.linkData and 'Point' in self.linkData.linkAttribs:
+            points = self.linkData.linkAttribs['Point']
+            for point in points:
+                try:
+                    x = float(point['X'])
+                    y = float(point['Y'])
+                    waypoints.append((x, y))
+                except (KeyError, ValueError) as e:
+                    from workflow_designer.wfd_logger import logger
+                    logger.warning(f"Invalid point data in link: {point}, error: {e}")
+                    
+        return waypoints
 
 class WFScene:
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
@@ -146,6 +193,9 @@ class WFScene:
         self.workflows: list[WFWorkflow] = [] 
         self.statuses: list[WFStatus] = [] 
         self.lines: list[WFLineGroup] = []
+        
+        # Create selection manager for this scene
+        self.selection_manager = SelectionManager()
 
         nodes, links = createObjectListFromXMLString(self.dlPlacement.LayoutData)
         self.xmlObjects: XMLObject = { 
@@ -154,6 +204,7 @@ class WFScene:
             }
 
         self.createEntitiesFromXML()
+        self._connectSelectionManager()
 
     def getWorkflowByKey(self, key) -> Optional[WFWorkflow]:
         return get_object_from_list(self.workflows, "entityKey", key)
@@ -221,7 +272,21 @@ class WFScene:
             if orgEntity is None or dstEntity is None:
                 raise ValueError(f"Invalid link entities: orgEntity={orgEntity}, dstEntity={dstEntity}")
 
-            self.lines.append(WFLineGroup(orgEntity, dstEntity))
+            self.lines.append(WFLineGroup(orgEntity, dstEntity, link))
+    
+    def _connectSelectionManager(self):
+        """Connect all entities and lines to the selection manager"""
+        # Connect workflow entities
+        for workflow in self.workflows:
+            workflow.set_selection_manager(self.selection_manager)
+        
+        # Connect status entities  
+        for status in self.statuses:
+            status.set_selection_manager(self.selection_manager)
+        
+        # Connect line groups
+        for line in self.lines:
+            line.set_selection_manager(self.selection_manager)
 
 
 @dataclass
