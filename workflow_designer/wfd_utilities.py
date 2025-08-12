@@ -419,6 +419,9 @@ class MultiSegmentArrow(QObject):
         self.lineItems: list[QGraphicsLineItem] = []
         self.arrowItem: QGraphicsPolygonItem = QGraphicsPolygonItem()
         
+        # Temporary line items for ghost dragging operations
+        self._temp_line_items: list[QGraphicsLineItem] = []
+        
         # Create line items for each segment
         self._createLineSegments()
         
@@ -456,12 +459,18 @@ class MultiSegmentArrow(QObject):
         # Calculate total number of segments needed
         numSegments = len(self.interactive_waypoints) + 1  # Source to first waypoint, waypoints to waypoints, last waypoint to dest
         
+        # DEBUG: Log segment creation
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"_createLineSegments: Creating {numSegments} line items for {len(self.interactive_waypoints)} waypoints")
+        
         # Create line items for each segment
         for i in range(numSegments):
             lineItem = QGraphicsLineItem()
             self.lineItems.append(lineItem)
             # Setup selection for this line segment
             self._setupLineSelection(lineItem)
+            
+        logger.debug(f"_createLineSegments: Created {len(self.lineItems)} line items total")
     
     def connectToEntities(self):
         """Connect to entity movement signals for automatic updates"""
@@ -473,6 +482,8 @@ class MultiSegmentArrow(QObject):
     def updateGeometry(self):
         """Recalculate line segments and arrow position based on current entity positions"""
         try:
+            # Clean up any temporary line items from ghost dragging
+            self._cleanup_temp_line_items()
             # Build complete path: source → waypoints → destination
             pathPoints = []
             
@@ -575,16 +586,24 @@ class MultiSegmentArrow(QObject):
         items.append(self.arrowItem)
         return items
     
+    def get_all_active_line_items(self) -> list[QGraphicsLineItem]:
+        """Return all currently active line items (regular + temporary)"""
+        return self.lineItems + self._temp_line_items
+    
     def setVisible(self, visible: bool):
         """Set visibility of all line segments and arrow"""
         for lineItem in self.lineItems:
             lineItem.setVisible(visible)
+        for temp_item in self._temp_line_items:
+            temp_item.setVisible(visible)
         self.arrowItem.setVisible(visible)
     
     def setPen(self, pen):
         """Set pen for all line segments and arrow"""
         for lineItem in self.lineItems:
             lineItem.setPen(pen)
+        for temp_item in self._temp_line_items:
+            temp_item.setPen(pen)
         self.arrowItem.setPen(pen)
     
     def _setupSelection(self):
@@ -643,6 +662,135 @@ class MultiSegmentArrow(QObject):
     def isSelected(self) -> bool:
         """Check if arrow is currently selected"""
         return self._is_selected
+    
+    def update_geometry_with_temp_waypoints(self, temp_waypoints: List['InteractiveWaypoint']):
+        """Update line geometry with temporary waypoints for preview (without modifying actual waypoints)"""
+        if not temp_waypoints:
+            # No waypoints - direct connection like SmartArrow
+            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            path_points = [startPoint, endPoint]
+        else:
+            # Build path with edge intersections using temp waypoints
+            path_points = []
+            
+            # First waypoint determines source edge intersection
+            first_waypoint = temp_waypoints[0]
+            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
+            path_points.append(startPoint)
+            
+            # Add all temp waypoints
+            for waypoint in temp_waypoints:
+                path_points.append(waypoint.position)
+            
+            # Last waypoint determines destination edge intersection  
+            last_waypoint = temp_waypoints[-1]
+            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
+            path_points.append(endPoint)
+        
+        # Update visual line segments with temp path
+        self._update_line_segments_visual(path_points)
+    
+    def _update_line_segments_visual(self, path_points: List[Tuple[float, float]]):
+        """Update the visual appearance of line segments with given path points"""
+        required_segments = len(path_points) - 1
+        available_segments = len(self.lineItems)
+        
+        # DEBUG: Log segment count information  
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"Line visual update: {len(path_points)} points → {required_segments} segments (have {available_segments} items)")
+        
+        # Create temporary line items if we need more segments than we have
+        if required_segments > available_segments:
+            logger.info(f"Creating {required_segments - available_segments} temporary line segments for ghost dragging")
+            
+            # Create additional temporary line items
+            missing_count = required_segments - available_segments
+            for i in range(missing_count):
+                temp_lineItem = QGraphicsLineItem()
+                # Copy visual properties from existing line items
+                if self.lineItems:
+                    temp_lineItem.setPen(self.lineItems[0].pen())
+                    temp_lineItem.setZValue(self.lineItems[0].zValue())
+                
+                self._temp_line_items.append(temp_lineItem)
+                
+                # Add to scene if we can find one from existing line items
+                if self.lineItems and self.lineItems[0].scene():
+                    scene = self.lineItems[0].scene()
+                    scene.addItem(temp_lineItem)
+                    logger.debug(f"  Created temporary line item {i} and added to scene")
+                
+                # Setup selection for temporary line item
+                self._setupLineSelection(temp_lineItem)
+        else:
+            # Clean up any existing temporary line items if we don't need them
+            self._cleanup_temp_line_items()
+        
+        # Combine regular and temporary line items for processing
+        all_line_items = self.lineItems + self._temp_line_items
+        
+        # Update all line segments (regular + temporary)
+        for i in range(required_segments):
+            if i < len(all_line_items):
+                lineItem = all_line_items[i]
+                start_point = path_points[i]
+                end_point = path_points[i + 1]
+                lineItem.setLine(start_point[0], start_point[1], end_point[0], end_point[1])
+                lineItem.setVisible(True)
+                
+                if i >= len(self.lineItems):
+                    logger.debug(f"  Temp segment {i}: ({start_point[0]:.1f},{start_point[1]:.1f}) → ({end_point[0]:.1f},{end_point[1]:.1f})")
+            else:
+                logger.error(f"  CRITICAL: Segment {i} has no line item even after creating temporaries!")
+        
+        # Hide any unused regular line items
+        for i in range(required_segments, len(self.lineItems)):
+            self.lineItems[i].setVisible(False)
+        
+        # Update arrow position (at the end point)
+        if len(path_points) >= 2:
+            start_point = path_points[-2]
+            end_point = path_points[-1]
+            
+            # Calculate arrow direction
+            dx = end_point[0] - start_point[0]
+            dy = end_point[1] - start_point[1]
+            
+            if dx != 0 or dy != 0:
+                angle = math.atan2(dy, dx)
+                
+                # Calculate arrow head points
+                wingAngle = math.pi / 6  # 30 degrees
+                
+                arrowP1X = end_point[0] - self.headSize * math.cos(angle - wingAngle)
+                arrowP1Y = end_point[1] - self.headSize * math.sin(angle - wingAngle)
+                
+                arrowP2X = end_point[0] - self.headSize * math.cos(angle + wingAngle)
+                arrowP2Y = end_point[1] - self.headSize * math.sin(angle + wingAngle)
+                
+                # Create arrow polygon
+                pointList = [
+                    QPointF(end_point[0], end_point[1]),  # Arrow tip
+                    QPointF(arrowP1X, arrowP1Y),          # Wing 1
+                    QPointF(arrowP2X, arrowP2Y)           # Wing 2
+                ]
+                
+                polygon = QPolygonF(pointList)
+                self.arrowItem.setPolygon(polygon)
+                self.arrowItem.setVisible(True)
+    
+    def _cleanup_temp_line_items(self):
+        """Clean up temporary line items created during ghost dragging"""
+        if self._temp_line_items:
+            from workflow_designer.wfd_logger import logger
+            logger.debug(f"Cleaning up {len(self._temp_line_items)} temporary line items")
+            
+            for temp_item in self._temp_line_items:
+                # Remove from scene if it's in one
+                if temp_item.scene():
+                    temp_item.scene().removeItem(temp_item)
+            
+            self._temp_line_items.clear()
     
     def get_interactive_waypoints(self) -> List['InteractiveWaypoint']:
         """Get the list of interactive waypoints"""
