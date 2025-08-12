@@ -96,6 +96,9 @@ class SelectionManager(QObject):
         # Check if it's an arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
             item.setSelected(True, self.selection_color)
+            # Show nodes for MultiSegmentArrow
+            if hasattr(item, 'show_nodes'):
+                item.show_nodes()
         # Fallback for other selectable items
         elif hasattr(item, 'setPen'):
             # Store original pen if not already stored
@@ -118,6 +121,9 @@ class SelectionManager(QObject):
         # Check if it's an arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
             item.setSelected(False, self.selection_color)
+            # Hide nodes for MultiSegmentArrow
+            if hasattr(item, 'hide_nodes'):
+                item.hide_nodes()
         # Fallback for other selectable items
         elif hasattr(item, 'setPen') and hasattr(item, '_original_pen'):
             item.setPen(item._original_pen)

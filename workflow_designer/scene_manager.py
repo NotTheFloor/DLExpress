@@ -77,16 +77,19 @@ class WorkflowSceneManager:
                         except Exception as e:
                             logger.error(f"Error adding entity {ent.entityKey} to scene: {e}")
                     
-                    # Add line segments 
+                    # Add line segments and nodes
                     for line in scene.lines:
                         try:
-                            for lineSeg in line.lineSegments:
+                            # Get all graphics items (including nodes)
+                            all_items = line.get_all_graphics_items() if hasattr(line, 'get_all_graphics_items') else line.lineSegments
+                            
+                            for item in all_items:
                                 # Handle both wrapped objects and raw Qt items
-                                if hasattr(lineSeg, 'graphicsItem'):
-                                    new_scene.addItem(lineSeg.graphicsItem)
+                                if hasattr(item, 'graphicsItem'):
+                                    new_scene.addItem(item.graphicsItem)
                                 else:
-                                    # Direct Qt graphics item (like arrow polygons)
-                                    new_scene.addItem(lineSeg)
+                                    # Direct Qt graphics item (like arrow polygons and nodes)
+                                    new_scene.addItem(item)
                         except Exception as e:
                             logger.error(f"Error adding line segments to scene: {e}")
                     

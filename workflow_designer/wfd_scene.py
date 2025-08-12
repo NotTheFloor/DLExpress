@@ -149,23 +149,32 @@ class WFLineGroup:
         # Extract waypoints from XML Point elements
         waypoints = self._extractWaypoints()
 
-        if waypoints:
-            # Create multi-segment arrow for complex paths
-            self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints)
-            # Add all graphics items from multi-segment arrow
-            self.lineSegments.extend(self.arrow.getGraphicsItems())
-        else:
-            # Create simple smart arrow for direct connections
-            self.arrow = SmartArrow(srcEntity, dstEntity)
-            # Add the graphics items from smart arrow
-            lineItem, arrowItem = self.arrow.getGraphicsItems()
-            self.lineSegments.append(lineItem)
-            self.lineSegments.append(arrowItem)
+        # Always use MultiSegmentArrow for consistent interactive node support
+        # MultiSegmentArrow handles the case of 0 waypoints correctly
+        self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints)
+        # Add all graphics items from multi-segment arrow
+        self.lineSegments.extend(self.arrow.getGraphicsItems())
     
     def set_selection_manager(self, selection_manager):
         """Set the selection manager for the arrow"""
         if hasattr(self.arrow, 'set_selection_manager'):
             self.arrow.set_selection_manager(selection_manager)
+        
+        # Create node manager for MultiSegmentArrow
+        if hasattr(self.arrow, 'create_node_manager'):
+            from workflow_designer.wfd_selection_manager import ThemeDetector
+            selection_color = ThemeDetector.get_selection_color()
+            node_manager = self.arrow.create_node_manager(selection_color)
+    
+    def get_all_graphics_items(self):
+        """Get all graphics items including line segments and nodes"""
+        items = self.lineSegments.copy()
+        
+        # Add node graphics items if they exist
+        if hasattr(self.arrow, 'get_node_graphics_items'):
+            items.extend(self.arrow.get_node_graphics_items())
+            
+        return items
     
     def _extractWaypoints(self) -> list[tuple[float, float]]:
         """Extract waypoint coordinates from XML Point elements"""

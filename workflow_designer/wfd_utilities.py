@@ -1,5 +1,5 @@
 import math
-from typing import Tuple, TYPE_CHECKING
+from typing import Tuple, TYPE_CHECKING, Optional, List
 
 from PySide6.QtCore import QPoint, QPointF, Qt, QObject, Signal
 from PySide6.QtGui import QPainter, QPolygon, QPolygonF, QBrush, QPen, QColor
@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsLineItem, QGraphicsPolygon
 
 if TYPE_CHECKING:
     from workflow_designer.wfd_scene import WFEntity
+    from workflow_designer.wfd_interactive_nodes import LineNodeManager, InteractiveWaypoint
 
 # Geometric calculation functions for arrow edge intersections
 def findCircleEdgeIntersection(centerX: float, centerY: float, radiusX: float, radiusY: float, 
@@ -254,6 +255,9 @@ class SmartArrow(QObject):
         self._original_pen: QPen = pen
         self._selection_manager = None
         
+        # Node management (SmartArrow doesn't use nodes, but needs the attribute for compatibility)
+        self._node_manager: Optional['LineNodeManager'] = None
+        
         # Make items selectable and setup click handling
         self._setupSelection()
         
@@ -378,12 +382,26 @@ class SmartArrow(QObject):
     def isSelected(self) -> bool:
         """Check if arrow is currently selected"""
         return self._is_selected
+    
+    # Node system compatibility methods (SmartArrow doesn't support nodes)
+    def show_nodes(self):
+        """SmartArrow doesn't support interactive nodes - no-op"""
+        pass
+    
+    def hide_nodes(self):
+        """SmartArrow doesn't support interactive nodes - no-op"""
+        pass
+    
+    def get_node_graphics_items(self) -> List[QGraphicsItem]:
+        """SmartArrow doesn't support interactive nodes - return empty list"""
+        return []
 
 
 class MultiSegmentArrow(QObject):
     """
     Dynamic arrow that handles multiple segments with waypoints.
     Only the first and last segments follow entity movement; middle segments remain fixed.
+    Supports interactive waypoint management with node visualization.
     """
     
     clicked = Signal()
@@ -393,7 +411,8 @@ class MultiSegmentArrow(QObject):
         
         self.srcEntity = srcEntity
         self.dstEntity = dstEntity
-        self.waypoints = waypoints or []  # List of (x, y) coordinates for intermediate points
+        # Convert static waypoints to InteractiveWaypoint objects
+        self.interactive_waypoints = self._convert_waypoints_to_interactive(waypoints or [])
         self.headSize = 8
         
         # Create line segments and arrowhead
@@ -415,6 +434,9 @@ class MultiSegmentArrow(QObject):
         self._original_pen: QPen = pen
         self._selection_manager = None
         
+        # Node management for interactive waypoints
+        self._node_manager: Optional['LineNodeManager'] = None
+        
         # Setup selection for all segments
         self._setupSelection()
         
@@ -424,10 +446,15 @@ class MultiSegmentArrow(QObject):
         # Initial calculation
         self.updateGeometry()
     
+    def _convert_waypoints_to_interactive(self, waypoints: List[Tuple[float, float]]) -> List['InteractiveWaypoint']:
+        """Convert static waypoint list to InteractiveWaypoint objects"""
+        from workflow_designer.wfd_interactive_nodes import InteractiveWaypoint
+        return [InteractiveWaypoint(pos, is_user_created=False) for pos in waypoints]
+    
     def _createLineSegments(self):
         """Create QGraphicsLineItem objects for each segment of the path"""
         # Calculate total number of segments needed
-        numSegments = len(self.waypoints) + 1  # Source to first waypoint, waypoints to waypoints, last waypoint to dest
+        numSegments = len(self.interactive_waypoints) + 1  # Source to first waypoint, waypoints to waypoints, last waypoint to dest
         
         # Create line items for each segment
         for i in range(numSegments):
@@ -450,7 +477,7 @@ class MultiSegmentArrow(QObject):
             pathPoints = []
             
             # Get source entity edge point
-            if not self.waypoints:
+            if not self.interactive_waypoints:
                 # No waypoints - direct connection like SmartArrow
                 startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
                 pathPoints = [startPoint, endPoint]
@@ -460,17 +487,17 @@ class MultiSegmentArrow(QObject):
                 dstCenterX, dstCenterY = self.dstEntity.shape.getCurrentCenter()
                 
                 # First waypoint determines source edge intersection
-                firstWaypointX, firstWaypointY = self.waypoints[0]
-                startPoint = self._calculateEntityEdgePoint(self.srcEntity, firstWaypointX, firstWaypointY)
+                first_waypoint = self.interactive_waypoints[0]
+                startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
                 pathPoints.append(startPoint)
                 
                 # Add all waypoints
-                for waypoint in self.waypoints:
-                    pathPoints.append(waypoint)
+                for waypoint in self.interactive_waypoints:
+                    pathPoints.append(waypoint.position)
                 
                 # Last waypoint determines destination edge intersection  
-                lastWaypointX, lastWaypointY = self.waypoints[-1]
-                endPoint = self._calculateEntityEdgePoint(self.dstEntity, lastWaypointX, lastWaypointY)
+                last_waypoint = self.interactive_waypoints[-1]
+                endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
                 pathPoints.append(endPoint)
             
             # Update line segments
@@ -616,3 +643,147 @@ class MultiSegmentArrow(QObject):
     def isSelected(self) -> bool:
         """Check if arrow is currently selected"""
         return self._is_selected
+    
+    def get_interactive_waypoints(self) -> List['InteractiveWaypoint']:
+        """Get the list of interactive waypoints"""
+        return self.interactive_waypoints
+    
+    def get_current_path_points(self) -> List[Tuple[float, float]]:
+        """Get the current complete path including entity edge points"""
+        if not self.interactive_waypoints:
+            # No waypoints - direct connection
+            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            return [startPoint, endPoint]
+        else:
+            # Build path with edge intersections
+            path_points = []
+            
+            # First waypoint determines source edge intersection
+            first_waypoint = self.interactive_waypoints[0]
+            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
+            path_points.append(startPoint)
+            
+            # Add all waypoints
+            for waypoint in self.interactive_waypoints:
+                path_points.append(waypoint.position)
+            
+            # Last waypoint determines destination edge intersection  
+            last_waypoint = self.interactive_waypoints[-1]
+            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
+            path_points.append(endPoint)
+            
+            return path_points
+    
+    def add_waypoint_at_index(self, waypoint: 'InteractiveWaypoint', segment_index: int):
+        """Add a waypoint at the specified segment index"""
+        # Insert waypoint at the correct position
+        # segment_index 0 means between source and first waypoint (or destination if no waypoints)
+        if segment_index <= 0:
+            self.interactive_waypoints.insert(0, waypoint)
+        elif segment_index >= len(self.interactive_waypoints):
+            self.interactive_waypoints.append(waypoint)
+        else:
+            self.interactive_waypoints.insert(segment_index, waypoint)
+        
+        # Recreate line segments with new waypoint count
+        self._recreateLineSegments()
+        
+        # Update geometry
+        self.updateGeometry()
+    
+    def remove_waypoint(self, waypoint: 'InteractiveWaypoint'):
+        """Remove a waypoint from the list"""
+        if waypoint in self.interactive_waypoints:
+            self.interactive_waypoints.remove(waypoint)
+            
+            # Recreate line segments with new waypoint count
+            self._recreateLineSegments()
+            
+            # Update geometry
+            self.updateGeometry()
+    
+    def _recreateLineSegments(self):
+        """Recreate line segments when waypoint count changes"""
+        # Store reference to scene from existing line items before clearing
+        scene = None
+        if self.lineItems:
+            scene = self.lineItems[0].scene()
+        
+        # Remove old line items from scene if they exist
+        if scene:
+            for old_item in self.lineItems:
+                if old_item.scene():
+                    scene.removeItem(old_item)
+        
+        # Clear existing line items
+        self.lineItems.clear()
+        
+        # Create new line segments
+        self._createLineSegments()
+        
+        # Add new line items to scene if we have a scene reference
+        if scene:
+            for new_item in self.lineItems:
+                scene.addItem(new_item)
+        
+        # Apply current visual properties
+        for lineItem in self.lineItems:
+            if self._is_selected:
+                # Apply selection appearance
+                from workflow_designer.wfd_selection_manager import ThemeDetector
+                selection_color = ThemeDetector.get_selection_color()
+                selection_pen = QPen(selection_color, 3)
+                lineItem.setPen(selection_pen)
+            else:
+                # Apply normal appearance
+                lineItem.setPen(self._original_pen)
+        
+        # If line was selected, ensure nodes are shown after recreation
+        if self._is_selected and self._node_manager:
+            self._node_manager.create_nodes(self.interactive_waypoints)
+            self._node_manager.show_nodes()
+    
+    def create_node_manager(self, selection_color: QColor) -> 'LineNodeManager':
+        """Create and return a node manager for this arrow"""
+        from workflow_designer.wfd_interactive_nodes import LineNodeManager
+        
+        if self._node_manager is None:
+            self._node_manager = LineNodeManager(self, selection_color)
+            
+            # Connect signals
+            self._node_manager.waypoint_moved.connect(self._on_waypoint_moved)
+            self._node_manager.waypoint_added.connect(self._on_waypoint_added)
+            self._node_manager.waypoint_removed.connect(self._on_waypoint_removed)
+            self._node_manager.geometry_update_requested.connect(self.updateGeometry)
+        
+        return self._node_manager
+    
+    def show_nodes(self):
+        """Show interactive nodes if they exist"""
+        if self._node_manager:
+            self._node_manager.create_nodes(self.interactive_waypoints)
+            self._node_manager.show_nodes()
+    
+    def hide_nodes(self):
+        """Hide interactive nodes if they exist"""
+        if self._node_manager:
+            self._node_manager.hide_nodes()
+    
+    def get_node_graphics_items(self) -> List[QGraphicsItem]:
+        """Get all node graphics items for adding to scene"""
+        if self._node_manager:
+            return self._node_manager.get_graphics_items()
+        return []
+    
+    def _on_waypoint_moved(self, waypoint: 'InteractiveWaypoint'):
+        """Handle waypoint movement from node manager"""
+        # Update geometry in real-time
+        self.updateGeometry()
+    
+    def _on_waypoint_added(self, waypoint: 'InteractiveWaypoint', segment_index: int):
+        """Handle waypoint addition from node manager"""
+        self.add_waypoint_at_index(waypoint, segment_index)
+    
+    def _on_waypoint_removed(self, waypoint: 'InteractiveWaypoint'):
+        """Handle waypoint removal from node manager"""
+        self.remove_waypoint(waypoint)

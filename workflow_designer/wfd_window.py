@@ -33,7 +33,9 @@ class WorkflowDesignerWindow(QDialog):
 
         main_splitter = QSplitter(Qt.Horizontal)
 
-        self.drawing_area = DrawingWidget(sceneDict, wfSceneDict)
+        # Pass the first workflow key in original order for consistent initial display
+        first_workflow_key = str(scene_manager.workflows[0].WorkflowKey) if scene_manager.workflows else None
+        self.drawing_area = DrawingWidget(sceneDict, wfSceneDict, first_workflow_key)
         main_splitter.addWidget(self.drawing_area)
 
         right_pane = QSplitter(Qt.Vertical)

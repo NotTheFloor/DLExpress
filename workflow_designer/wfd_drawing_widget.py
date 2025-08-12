@@ -35,12 +35,17 @@ class CustomGraphicsView(QGraphicsView):
 
 
 class DrawingWidget(QFrame):
-    def __init__(self, sceneDict: dict, sceneManagerDict: dict = None, parent=None):
+    def __init__(self, sceneDict: dict, sceneManagerDict: dict = None, initial_workflow_key: str = None, parent=None):
         super().__init__(parent)
 
         self.sceneDict: dict = sceneDict  # Qt graphics scenes
         self.sceneManagerDict: dict = sceneManagerDict or {}  # WFScene objects
-        self.currentWorkflow = list(sceneDict.keys())[0]
+        # Use provided initial workflow key, or fall back to first available key
+        if initial_workflow_key and initial_workflow_key in sceneDict:
+            self.currentWorkflow = initial_workflow_key
+        else:
+            # Fallback to first available workflow
+            self.currentWorkflow = next(iter(sceneDict.keys())) if sceneDict else None
 
         self.setMinimumSize(_DEF_DW_SZ_X, _DEF_DW_SZ_Y)
 
@@ -50,11 +55,13 @@ class DrawingWidget(QFrame):
         self.view = CustomGraphicsView()
         layout.addWidget(self.view)
 
-        self.view.setScene(self.sceneDict[self.currentWorkflow])
-        
-        # Set the WFScene reference if available
-        if self.currentWorkflow in self.sceneManagerDict:
-            self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
+        # Set initial scene if we have workflows
+        if self.currentWorkflow:
+            self.view.setScene(self.sceneDict[self.currentWorkflow])
+            
+            # Set the WFScene reference if available
+            if self.currentWorkflow in self.sceneManagerDict:
+                self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
 
 
     def change_workflow(self, wfTitle):
