@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Tuple
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsObject, QGraphicsRectItem, QGraphicsLineItem
@@ -58,6 +58,22 @@ class Shape(QObject):
 
     def wfdItemChange(self, change, value):
         self.moved.emit(value)
+    
+    def getCurrentCenter(self) -> Tuple[float, float]:
+        """Get the current center coordinates from the graphics item's position"""
+        # Get current position of graphics item
+        pos = self.graphicsItem.pos()
+        
+        # Calculate current center based on graphics item position and rect size
+        currentCenterX = pos.x() + self.rect.width / 2
+        currentCenterY = pos.y() + self.rect.height / 2
+        
+        return currentCenterX, currentCenterY
+    
+    def getCurrentBounds(self) -> Tuple[float, float, float, float]:
+        """Get current bounds (left, top, width, height) from graphics item position"""
+        pos = self.graphicsItem.pos()
+        return pos.x(), pos.y(), self.rect.width, self.rect.height
 
 
 class ShapeRect(Shape):

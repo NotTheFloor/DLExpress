@@ -11,7 +11,7 @@ from doclink_py.models.workflows import Workflow, WorkflowPlacement
 
 from workflow_designer.wfd_objects import Link, Node, Rect, WFDFont, WFDLineSegments
 from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeLine, ShapeRect
-from workflow_designer.wfd_utilities import addArrowToLineItem
+from workflow_designer.wfd_utilities import addArrowToLineItem, SmartArrow
 from workflow_designer.wfd_xml import createObjectListFromXMLString
 
 if TYPE_CHECKING:
@@ -127,20 +127,14 @@ class WFLineGroup:
         self.dstEntity = dstEntity
         self.pointList = pointList
 
-        self.lineSegments: list[ShapeLine] = []
+        self.lineSegments: list = []  # Will contain both ShapeLine and graphics items
 
-        # input(f"A line: ({srcEntity.shape.rect.cx}, {srcEntity.shape.rect.cy})")
-
-        newLine = ShapeLine(
-                srcEntity.shape.rect.cx, 
-                srcEntity.shape.rect.cy, 
-                dstEntity.shape.rect.cx, 
-                dstEntity.shape.rect.cy, 
-                self
-            )
-        self.lineSegments.append(newLine)
-        # Add arrow as raw Qt item (QGraphicsPolygonItem)
-        arrowItem = addArrowToLineItem(self.lineSegments[-1].graphicsItem)
+        # Create smart arrow that handles both line and arrowhead dynamically
+        self.smartArrow = SmartArrow(srcEntity, dstEntity)
+        
+        # Add the graphics items from smart arrow to line segments for scene management
+        lineItem, arrowItem = self.smartArrow.getGraphicsItems()
+        self.lineSegments.append(lineItem)
         self.lineSegments.append(arrowItem)
 
 class WFScene:

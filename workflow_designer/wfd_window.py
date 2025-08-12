@@ -22,6 +22,13 @@ class WorkflowDesignerWindow(QDialog):
 
         scene_manager = WorkflowSceneManager(doclink)
         sceneDict = scene_manager.graphicScenes #scene_manager.build_scenes()
+        
+        # Create mapping from workflow titles to WorkflowKeys
+        self.title_to_key_map = {}
+        for workflow in scene_manager.workflows:
+            key = str(workflow.WorkflowKey)
+            self.title_to_key_map[workflow.Title] = key
+            print(f"Mapping: '{workflow.Title}' -> {key}")
 
         main_splitter = QSplitter(Qt.Horizontal)
 
@@ -58,4 +65,14 @@ class WorkflowDesignerWindow(QDialog):
         return workflow_list
 
     def change_workflow(self, index):
-        self.drawing_area.change_workflow(index.data())
+        workflow_title = index.data()
+        print(f"User selected workflow: '{workflow_title}'")
+        
+        # Convert title to WorkflowKey using the mapping
+        if workflow_title in self.title_to_key_map:
+            workflow_key = self.title_to_key_map[workflow_title]
+            print(f"Mapped to key: {workflow_key}")
+            self.drawing_area.change_workflow(workflow_key)
+            print(f"Successfully switched to workflow: '{workflow_title}'")
+        else:
+            print(f"Error: No workflow found for title '{workflow_title}'")

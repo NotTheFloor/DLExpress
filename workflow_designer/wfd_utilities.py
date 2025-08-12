@@ -1,8 +1,164 @@
 import math
+from typing import Tuple, TYPE_CHECKING
 
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QPainter, QPolygon, QPolygonF, QBrush
+from PySide6.QtCore import QPoint, QPointF, Qt, QObject, Signal
+from PySide6.QtGui import QPainter, QPolygon, QPolygonF, QBrush, QPen
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsLineItem, QGraphicsPolygonItem
+
+if TYPE_CHECKING:
+    from workflow_designer.wfd_scene import WFEntity
+
+# Geometric calculation functions for arrow edge intersections
+def findCircleEdgeIntersection(centerX: float, centerY: float, radiusX: float, radiusY: float, 
+                               lineStartX: float, lineStartY: float, lineEndX: float, lineEndY: float) -> Tuple[float, float]:
+    """
+    Find where a line from lineStart to lineEnd intersects the edge of an ellipse.
+    Returns the intersection point on the ellipse edge closest to lineEnd.
+    """
+    # Direction vector from line start to end
+    dx = lineEndX - lineStartX
+    dy = lineEndY - lineStartY
+    
+    # Normalize direction
+    length = math.sqrt(dx * dx + dy * dy)
+    if length == 0:
+        return centerX, centerY
+    
+    dx /= length
+    dy /= length
+    
+    # For ellipse: (x-cx)²/rx² + (y-cy)²/ry² = 1
+    # Parametric line: x = cx + t*dx, y = cy + t*dy
+    # Solve for t where line intersects ellipse
+    
+    # Ellipse equation coefficients
+    a = (dx * dx) / (radiusX * radiusX) + (dy * dy) / (radiusY * radiusY)
+    b = 2 * dx * (lineStartX - centerX) / (radiusX * radiusX) + 2 * dy * (lineStartY - centerY) / (radiusY * radiusY)
+    c = ((lineStartX - centerX) * (lineStartX - centerX)) / (radiusX * radiusX) + ((lineStartY - centerY) * (lineStartY - centerY)) / (radiusY * radiusY) - 1
+    
+    # Quadratic formula
+    discriminant = b * b - 4 * a * c
+    if discriminant < 0:
+        return centerX, centerY  # No intersection, return center
+    
+    sqrt_discriminant = math.sqrt(discriminant)
+    t1 = (-b + sqrt_discriminant) / (2 * a)
+    t2 = (-b - sqrt_discriminant) / (2 * a)
+    
+    # Choose the intersection point that's in the direction we want
+    t = t1 if t1 > 0 else t2
+    
+    intersectX = lineStartX + t * dx
+    intersectY = lineStartY + t * dy
+    
+    return intersectX, intersectY
+
+
+def findRectangleEdgeIntersection(rectLeft: float, rectTop: float, rectWidth: float, rectHeight: float,
+                                  lineStartX: float, lineStartY: float, lineEndX: float, lineEndY: float) -> Tuple[float, float]:
+    """
+    Find where a line from lineStart to lineEnd intersects the edge of a rectangle.
+    Returns the intersection point on the rectangle edge closest to lineEnd.
+    """
+    rectRight = rectLeft + rectWidth
+    rectBottom = rectTop + rectHeight
+    
+    # Direction vector
+    dx = lineEndX - lineStartX
+    dy = lineEndY - lineStartY
+    
+    if dx == 0 and dy == 0:
+        return lineStartX, lineStartY
+    
+    # Find intersections with all four edges and choose the closest valid one
+    intersections = []
+    
+    # Left edge (x = rectLeft)
+    if dx != 0:
+        t = (rectLeft - lineStartX) / dx
+        y = lineStartY + t * dy
+        if 0 <= t <= 1 and rectTop <= y <= rectBottom:
+            intersections.append((rectLeft, y, t))
+    
+    # Right edge (x = rectRight) 
+    if dx != 0:
+        t = (rectRight - lineStartX) / dx
+        y = lineStartY + t * dy
+        if 0 <= t <= 1 and rectTop <= y <= rectBottom:
+            intersections.append((rectRight, y, t))
+    
+    # Top edge (y = rectTop)
+    if dy != 0:
+        t = (rectTop - lineStartY) / dy
+        x = lineStartX + t * dx
+        if 0 <= t <= 1 and rectLeft <= x <= rectRight:
+            intersections.append((x, rectTop, t))
+    
+    # Bottom edge (y = rectBottom)
+    if dy != 0:
+        t = (rectBottom - lineStartY) / dy
+        x = lineStartX + t * dx
+        if 0 <= t <= 1 and rectLeft <= x <= rectRight:
+            intersections.append((x, rectBottom, t))
+    
+    if not intersections:
+        # No valid intersection found, return the closest rectangle corner
+        centerX = rectLeft + rectWidth / 2
+        centerY = rectTop + rectHeight / 2
+        return centerX, centerY
+    
+    # Return the intersection with the largest t value (closest to lineEnd)
+    intersections.sort(key=lambda x: x[2], reverse=True)
+    return intersections[0][0], intersections[0][1]
+
+
+def calculateLineEndpoints(srcEntity: "WFEntity", dstEntity: "WFEntity") -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    """
+    Calculate the actual start and end points for a line between two entities,
+    taking into account their shapes (circle/ellipse vs rectangle).
+    Uses current entity positions for dynamic updates.
+    Returns (startPoint, endPoint) as ((x1, y1), (x2, y2))
+    """
+    from workflow_designer.wfd_scene import EntityType
+    
+    # Get current entity centers (dynamic positions)
+    srcCenterX, srcCenterY = srcEntity.shape.getCurrentCenter()
+    dstCenterX, dstCenterY = dstEntity.shape.getCurrentCenter()
+    
+    # Calculate start point (where line exits source entity)
+    if srcEntity.entityType == EntityType.STATUS:  # Ellipse/Circle
+        # Use original radii (shape doesn't change, only position)
+        startX, startY = findCircleEdgeIntersection(
+            srcCenterX, srcCenterY, 
+            srcEntity.shape.rect.rx, srcEntity.shape.rect.ry,
+            srcCenterX, srcCenterY, dstCenterX, dstCenterY
+        )
+    else:  # Rectangle (Workflow)
+        # Use current bounds for rectangle
+        srcLeft, srcTop, srcWidth, srcHeight = srcEntity.shape.getCurrentBounds()
+        startX, startY = findRectangleEdgeIntersection(
+            srcLeft, srcTop, srcWidth, srcHeight,
+            srcCenterX, srcCenterY, dstCenterX, dstCenterY
+        )
+    
+    # Calculate end point (where line enters destination entity)
+    if dstEntity.entityType == EntityType.STATUS:  # Ellipse/Circle
+        # Use original radii (shape doesn't change, only position)
+        endX, endY = findCircleEdgeIntersection(
+            dstCenterX, dstCenterY,
+            dstEntity.shape.rect.rx, dstEntity.shape.rect.ry,
+            dstCenterX, dstCenterY, srcCenterX, srcCenterY
+        )
+    else:  # Rectangle (Workflow)  
+        # Use current bounds for rectangle
+        dstLeft, dstTop, dstWidth, dstHeight = dstEntity.shape.getCurrentBounds()
+        endX, endY = findRectangleEdgeIntersection(
+            dstLeft, dstTop, dstWidth, dstHeight,
+            dstCenterX, dstCenterY, srcCenterX, srcCenterY
+        )
+    
+    return (startX, startY), (endX, endY)
+
 
 # Inspired by https://forum.qt.io/topic/109749/how-to-create-an-arrow-in-qt/6
 # Probably worth converting all to Q primitives (QPointF, QLineF, etc.)
@@ -66,3 +222,96 @@ def addArrowToLineItem(graphicsItem: QGraphicsLineItem, headSize: int = 5):
     arrowItem.setBrush(QBrush(graphicsItem.pen().color()))
     
     return arrowItem
+
+
+class SmartArrow(QObject):
+    """
+    Dynamic arrow that maintains references to source and destination entities
+    and updates automatically when they move.
+    """
+    
+    def __init__(self, srcEntity: "WFEntity", dstEntity: "WFEntity", parent=None):
+        super().__init__(parent)
+        
+        self.srcEntity = srcEntity
+        self.dstEntity = dstEntity
+        self.headSize = 8
+        
+        # Create the graphics items
+        self.lineItem: QGraphicsLineItem = QGraphicsLineItem()
+        self.arrowItem: QGraphicsPolygonItem = QGraphicsPolygonItem()
+        
+        # Set visual properties
+        pen = QPen(Qt.black, 2)
+        self.lineItem.setPen(pen)
+        self.arrowItem.setPen(pen)
+        self.arrowItem.setBrush(QBrush(Qt.black))
+        
+        # Connect to entity movement signals
+        self.connectToEntities()
+        
+        # Initial calculation
+        self.updateGeometry()
+    
+    def connectToEntities(self):
+        """Connect to entity movement signals for automatic updates"""
+        if hasattr(self.srcEntity.shape, 'moved'):
+            self.srcEntity.shape.moved.connect(self.updateGeometry)
+        if hasattr(self.dstEntity.shape, 'moved'):  
+            self.dstEntity.shape.moved.connect(self.updateGeometry)
+    
+    def updateGeometry(self):
+        """Recalculate line and arrow positions based on current entity positions"""
+        try:
+            # Calculate proper edge intersection points
+            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            
+            # Update line geometry
+            self.lineItem.setLine(startPoint[0], startPoint[1], endPoint[0], endPoint[1])
+            
+            # Calculate arrow direction with consistent math
+            dx = endPoint[0] - startPoint[0]
+            dy = endPoint[1] - startPoint[1]
+            
+            if dx == 0 and dy == 0:
+                return  # No arrow for zero-length line
+                
+            # Use consistent angle calculation (positive dy for correct direction)  
+            angle = math.atan2(dy, dx)
+            
+            # Calculate arrow head points (30-degree wings)
+            wingAngle = math.pi / 6  # 30 degrees
+            
+            arrowP1X = endPoint[0] - self.headSize * math.cos(angle - wingAngle)
+            arrowP1Y = endPoint[1] - self.headSize * math.sin(angle - wingAngle)
+            
+            arrowP2X = endPoint[0] - self.headSize * math.cos(angle + wingAngle)  
+            arrowP2Y = endPoint[1] - self.headSize * math.sin(angle + wingAngle)
+            
+            # Create arrow polygon
+            pointList = [
+                QPointF(endPoint[0], endPoint[1]),  # Arrow tip
+                QPointF(arrowP1X, arrowP1Y),        # Wing 1
+                QPointF(arrowP2X, arrowP2Y)         # Wing 2
+            ]
+            
+            polygon = QPolygonF(pointList)
+            self.arrowItem.setPolygon(polygon)
+            
+        except Exception as e:
+            from workflow_designer.wfd_logger import logger
+            logger.error(f"Error updating arrow geometry: {e}")
+    
+    def getGraphicsItems(self) -> Tuple[QGraphicsLineItem, QGraphicsPolygonItem]:
+        """Return the graphics items for adding to scene"""
+        return self.lineItem, self.arrowItem
+    
+    def setVisible(self, visible: bool):
+        """Set visibility of both line and arrow"""
+        self.lineItem.setVisible(visible)
+        self.arrowItem.setVisible(visible)
+    
+    def setPen(self, pen):
+        """Set pen for both line and arrow"""
+        self.lineItem.setPen(pen)
+        self.arrowItem.setPen(pen)
