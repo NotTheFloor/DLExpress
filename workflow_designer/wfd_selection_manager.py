@@ -144,10 +144,10 @@ class SelectionManager(QObject):
         # Check if it's an entity (WFEntity)
         if hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
             item.shape.setSelected(True, self.selection_color)
-        # Check if it's an arrow (SmartArrow or MultiSegmentArrow)
+        # Check if it's a line group (WFLineGroup) or arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
             item.setSelected(True, self.selection_color)
-            # Show nodes for MultiSegmentArrow
+            # Show nodes for MultiSegmentArrow or WFLineGroup containing one
             if hasattr(item, 'show_nodes'):
                 item.show_nodes()
         # Fallback for other selectable items
@@ -164,10 +164,10 @@ class SelectionManager(QObject):
         # Check if it's an entity (WFEntity)
         if hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
             item.shape.setSelected(False, self.selection_color)
-        # Check if it's an arrow (SmartArrow or MultiSegmentArrow)
+        # Check if it's a line group (WFLineGroup) or arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
             item.setSelected(False, self.selection_color)
-            # Hide nodes for MultiSegmentArrow
+            # Hide nodes for MultiSegmentArrow or WFLineGroup containing one
             if hasattr(item, 'hide_nodes'):
                 item.hide_nodes()
         # Fallback for other selectable items

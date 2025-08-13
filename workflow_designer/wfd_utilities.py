@@ -352,6 +352,7 @@ class SmartArrow(QObject):
         
         # Node management (SmartArrow doesn't use nodes, but needs the attribute for compatibility)
         self._node_manager: Optional['LineNodeManager'] = None
+        self._parent_line_group = None  # Will be set by WFLineGroup
         
         # Make items selectable and setup click handling
         self._setupSelection()
@@ -440,7 +441,9 @@ class SmartArrow(QObject):
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self, with_modifier=has_modifier)
+                    # Select the parent WFLineGroup instead of the arrow itself
+                    item_to_select = self._parent_line_group if self._parent_line_group else self
+                    self._selection_manager.select_item(item_to_select, with_modifier=has_modifier)
             original_line_press(event)
         self.lineItem.mousePressEvent = line_click_handler
         
@@ -453,7 +456,9 @@ class SmartArrow(QObject):
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self, with_modifier=has_modifier)
+                    # Select the parent WFLineGroup instead of the arrow itself
+                    item_to_select = self._parent_line_group if self._parent_line_group else self
+                    self._selection_manager.select_item(item_to_select, with_modifier=has_modifier)
             original_arrow_press(event)
         self.arrowItem.mousePressEvent = arrow_click_handler
     
@@ -542,6 +547,7 @@ class MultiSegmentArrow(QObject):
         
         # Node management for interactive waypoints
         self._node_manager: Optional['LineNodeManager'] = None
+        self._parent_line_group = None  # Will be set by WFLineGroup
         
         # Setup selection for all segments
         self._setupSelection()
@@ -734,7 +740,9 @@ class MultiSegmentArrow(QObject):
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self, with_modifier=has_modifier)
+                    # Select the parent WFLineGroup instead of the arrow itself
+                    item_to_select = self._parent_line_group if self._parent_line_group else self
+                    self._selection_manager.select_item(item_to_select, with_modifier=has_modifier)
             original_arrow_press(event)
         self.arrowItem.mousePressEvent = arrow_click_handler
     
@@ -750,7 +758,9 @@ class MultiSegmentArrow(QObject):
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self, with_modifier=has_modifier)
+                    # Select the parent WFLineGroup instead of the arrow itself
+                    item_to_select = self._parent_line_group if self._parent_line_group else self
+                    self._selection_manager.select_item(item_to_select, with_modifier=has_modifier)
             original_press(event)
         lineItem.mousePressEvent = line_click_handler
     

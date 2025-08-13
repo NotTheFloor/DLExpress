@@ -13,6 +13,7 @@ except ImportError:
 from .wfd_utilities import drawArrow
 from .wfd_logger import logger
 from .wfd_rendering_config import RenderingOptimizer, default_config
+from .wfd_deletion_manager import DeletionManager
 
 _DEF_DW_SZ_X = 1400
 _DEF_DW_SZ_Y = 900
@@ -75,6 +76,62 @@ class CustomGraphicsView(QGraphicsView):
         except Exception as e:
             logger.error(f"Failed to enable OpenGL viewport: {e}")
             return False
+    
+    def keyPressEvent(self, event):
+        """Handle keyboard events, particularly Delete key for object deletion"""
+        if event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
+            self._handleDeleteKey()
+        else:
+            # Call parent handler for other keys
+            super().keyPressEvent(event)
+    
+    def _handleDeleteKey(self):
+        """Handle Delete key press - delete selected items"""
+        if not self._wf_scene or not hasattr(self._wf_scene, 'selection_manager'):
+            logger.warning("No scene or selection manager available for deletion")
+            return
+        
+        selection_manager = self._wf_scene.selection_manager
+        selected_items = selection_manager.get_selected_items()
+        
+        if not selected_items:
+            logger.debug("No items selected for deletion")
+            return
+        
+        # Debug logging to understand what's selected
+        logger.debug(f"Selected {len(selected_items)} items for deletion:")
+        for i, item in enumerate(selected_items):
+            item_type = type(item).__name__
+            has_entity_type = hasattr(item, 'entityType')
+            has_src_entity = hasattr(item, 'srcEntity')
+            logger.debug(f"  {i}: {item_type} (entityType={has_entity_type}, srcEntity={has_src_entity})")
+        
+        # Create deletion manager with Qt scene reference for graphics cleanup
+        qt_scene = self.scene() if hasattr(self, 'scene') and self.scene() else None
+        deletion_manager = DeletionManager(self._wf_scene, qt_scene)
+        
+        # Check if deletion is possible
+        if not deletion_manager.canDelete(list(selected_items)):
+            logger.warning("Selected items cannot be deleted")
+            return
+        
+        # For entities, show impact information
+        entities = [item for item in selected_items if hasattr(item, 'entityType')]
+        if entities:
+            impact = deletion_manager.getImpactedItems(entities)
+            logger.info(f"Delete impact: {impact['entities']} entities + {impact['cascaded_lines']} connected lines = {impact['total_items']} total items")
+        
+        # Perform the deletion
+        try:
+            result = deletion_manager.deleteSelected(selection_manager)
+            logger.info(f"Deletion completed: {result.total_items_deleted} items deleted")
+            
+            # Refresh rendering settings after deletion (scene complexity may have changed)
+            if hasattr(self.parent(), 'refresh_rendering_settings'):
+                self.parent().refresh_rendering_settings()
+                
+        except Exception as e:
+            logger.error(f"Error during deletion: {e}")
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

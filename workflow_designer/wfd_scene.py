@@ -77,6 +77,30 @@ class WFEntity:
         """Handle entity click - select this entity"""
         if self._selection_manager:
             self._selection_manager.select_item(self, with_modifier=has_modifier)
+    
+    def addSourceLine(self, line: 'WFLineGroup'):
+        """Add a line that originates from this entity"""
+        if line not in self.sourceLines:
+            self.sourceLines.append(line)
+    
+    def addDestLine(self, line: 'WFLineGroup'):
+        """Add a line that terminates at this entity"""
+        if line not in self.destLines:
+            self.destLines.append(line)
+    
+    def removeSourceLine(self, line: 'WFLineGroup'):
+        """Remove a line that originates from this entity"""
+        if line in self.sourceLines:
+            self.sourceLines.remove(line)
+    
+    def removeDestLine(self, line: 'WFLineGroup'):
+        """Remove a line that terminates at this entity"""
+        if line in self.destLines:
+            self.destLines.remove(line)
+    
+    def getAllConnectedLines(self) -> list['WFLineGroup']:
+        """Get all lines connected to this entity (both source and destination)"""
+        return self.sourceLines + self.destLines
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
@@ -195,8 +219,14 @@ class WFLineGroup:
         # Always use MultiSegmentArrow for consistent interactive node support
         # MultiSegmentArrow handles the case of 0 waypoints correctly
         self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints, self.srcStatusKey, self.dstStatusKey)
+        # Set back-reference so arrow can select the parent WFLineGroup
+        self.arrow._parent_line_group = self
         # Add all graphics items from multi-segment arrow
         self.lineSegments.extend(self.arrow.getGraphicsItems())
+        
+        # Register this line with its source and destination entities for bidirectional tracking
+        srcEntity.addSourceLine(self)
+        dstEntity.addDestLine(self)
     
     def set_selection_manager(self, selection_manager):
         """Set the selection manager for the arrow"""
@@ -243,6 +273,26 @@ class WFLineGroup:
             
         key = self.linkData.linkAttribs["LayoutLink"][keyType]
         return str(key).upper() if key else None
+    
+    def setSelected(self, selected: bool, selection_color):
+        """Set selection state - delegates to the contained arrow"""
+        if hasattr(self.arrow, 'setSelected'):
+            self.arrow.setSelected(selected, selection_color)
+            # Show/hide nodes for MultiSegmentArrow
+            if hasattr(self.arrow, 'show_nodes') and selected:
+                self.arrow.show_nodes()
+            elif hasattr(self.arrow, 'hide_nodes') and not selected:
+                self.arrow.hide_nodes()
+    
+    def show_nodes(self):
+        """Show interactive nodes - delegates to arrow"""
+        if hasattr(self.arrow, 'show_nodes'):
+            self.arrow.show_nodes()
+    
+    def hide_nodes(self):
+        """Hide interactive nodes - delegates to arrow"""
+        if hasattr(self.arrow, 'hide_nodes'):
+            self.arrow.hide_nodes()
 
 class WFScene:
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
