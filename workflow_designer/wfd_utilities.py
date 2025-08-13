@@ -340,9 +340,12 @@ class SmartArrow(QObject):
         original_line_press = self.lineItem.mousePressEvent
         def line_click_handler(event):
             if event.button() == Qt.LeftButton:
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self)
+                    self._selection_manager.select_item(self, with_modifier=has_modifier)
             original_line_press(event)
         self.lineItem.mousePressEvent = line_click_handler
         
@@ -350,9 +353,12 @@ class SmartArrow(QObject):
         original_arrow_press = self.arrowItem.mousePressEvent
         def arrow_click_handler(event):
             if event.button() == Qt.LeftButton:
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self)
+                    self._selection_manager.select_item(self, with_modifier=has_modifier)
             original_arrow_press(event)
         self.arrowItem.mousePressEvent = arrow_click_handler
     
@@ -615,9 +621,12 @@ class MultiSegmentArrow(QObject):
         original_arrow_press = self.arrowItem.mousePressEvent
         def arrow_click_handler(event):
             if event.button() == Qt.LeftButton:
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self)
+                    self._selection_manager.select_item(self, with_modifier=has_modifier)
             original_arrow_press(event)
         self.arrowItem.mousePressEvent = arrow_click_handler
     
@@ -628,9 +637,12 @@ class MultiSegmentArrow(QObject):
         original_press = lineItem.mousePressEvent
         def line_click_handler(event):
             if event.button() == Qt.LeftButton:
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 self.clicked.emit()
                 if self._selection_manager:
-                    self._selection_manager.select_item(self)
+                    self._selection_manager.select_item(self, with_modifier=has_modifier)
             original_press(event)
         lineItem.mousePressEvent = line_click_handler
     

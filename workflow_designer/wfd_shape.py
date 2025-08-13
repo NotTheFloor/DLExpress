@@ -41,7 +41,7 @@ class ExtendedEllipse(QGraphicsEllipseItem):
 
 
 class Shape(QObject):
-    clicked = Signal()
+    clicked = Signal(bool)  # Emits True if modifier key was held
     pressed = Signal()
     released = Signal()
     moved = Signal(QPointF)
@@ -123,7 +123,10 @@ class Shape(QObject):
         def handle_mouse_press(event):
             from PySide6.QtCore import Qt
             if event.button() == Qt.LeftButton:
-                self.clicked.emit()
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
+                self.clicked.emit(has_modifier)
             # Call original handler
             original_mouse_press(event)
             

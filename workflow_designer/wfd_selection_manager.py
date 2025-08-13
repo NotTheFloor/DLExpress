@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Set, TYPE_CHECKING
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
@@ -48,45 +48,96 @@ class ThemeDetector:
 
 
 class SelectionManager(QObject):
-    """Manages selection state for workflow designer items"""
+    """Manages multi-selection state for workflow designer items with type-based rules"""
     
-    selectionChanged = Signal(object)  # Emits selected item or None
+    selectionChanged = Signal(set)  # Emits set of selected items
     
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        self._selected_item: Optional[object] = None
+        self._selected_items: Set[object] = set()
+        self._selection_mode: Optional[str] = None  # "ENTITY" or "LINE" 
         self.selection_color = ThemeDetector.get_selection_color()
         self.selection_color_light = ThemeDetector.get_selection_color_lighter()
         
-    def select_item(self, item: object):
-        """Select an item (entity or line), deselecting the previous one"""
-        if self._selected_item == item:
-            return  # Already selected
+    def select_item(self, item: object, with_modifier: bool = False):
+        """Select an item with optional modifier key support for multi-selection"""
+        if with_modifier:
+            self._handle_modifier_selection(item)
+        else:
+            # Normal click - clear selection and select only this item
+            self.deselect_all()
+            self._add_item_to_selection(item)
             
-        # Deselect previous item
-        if self._selected_item is not None:
-            self._deselect_current()
+    def _handle_modifier_selection(self, item: object):
+        """Handle Ctrl/Cmd+click selection"""
+        item_type = self._get_item_type(item)
         
-        # Select new item
-        self._selected_item = item
+        if item in self._selected_items:
+            # Item already selected - remove it (toggle off)
+            self._remove_item_from_selection(item)
+        else:
+            # Check if we can add this item type to current selection
+            if self._can_add_item_type(item_type):
+                self._add_item_to_selection(item)
+            # If type mismatch, ignore the selection (following the rules)
+                
+    def _add_item_to_selection(self, item: object):
+        """Add an item to the selection"""
+        item_type = self._get_item_type(item)
+        
+        # Set selection mode if this is the first item
+        if not self._selected_items:
+            self._selection_mode = item_type
+            
+        self._selected_items.add(item)
         self._apply_selection(item)
-        self.selectionChanged.emit(item)
+        self.selectionChanged.emit(self._selected_items.copy())
+        
+    def _remove_item_from_selection(self, item: object):
+        """Remove an item from the selection"""
+        if item in self._selected_items:
+            self._selected_items.remove(item)
+            self._deselect_item(item)
+            
+            # Clear selection mode if no items remain
+            if not self._selected_items:
+                self._selection_mode = None
+                
+            self.selectionChanged.emit(self._selected_items.copy())
     
     def deselect_all(self):
         """Deselect all items"""
-        if self._selected_item is not None:
-            self._deselect_current()
-            self._selected_item = None
-            self.selectionChanged.emit(None)
+        if self._selected_items:
+            # Deselect all items visually
+            for item in self._selected_items.copy():
+                self._deselect_item(item)
+            
+            self._selected_items.clear()
+            self._selection_mode = None
+            self.selectionChanged.emit(set())
+    
+    def get_selected_items(self) -> Set[object]:
+        """Get currently selected items"""
+        return self._selected_items.copy()
     
     def get_selected_item(self) -> Optional[object]:
-        """Get currently selected item"""
-        return self._selected_item
+        """Get single selected item (for backward compatibility)"""
+        if len(self._selected_items) == 1:
+            return next(iter(self._selected_items))
+        return None
     
     def is_selected(self, item: object) -> bool:
         """Check if an item is currently selected"""
-        return self._selected_item == item
+        return item in self._selected_items
+        
+    def has_selection(self) -> bool:
+        """Check if any items are selected"""
+        return bool(self._selected_items)
+        
+    def get_selection_mode(self) -> Optional[str]:
+        """Get current selection mode"""
+        return self._selection_mode
     
     def _apply_selection(self, item: object):
         """Apply visual selection to an item"""
@@ -108,13 +159,8 @@ class SelectionManager(QObject):
             selection_pen = QPen(self.selection_color, 3)
             item.setPen(selection_pen)
     
-    def _deselect_current(self):
-        """Remove visual selection from current item"""
-        if self._selected_item is None:
-            return
-            
-        item = self._selected_item
-        
+    def _deselect_item(self, item: object):
+        """Remove visual selection from a specific item"""
         # Check if it's an entity (WFEntity)
         if hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
             item.shape.setSelected(False, self.selection_color)
@@ -135,9 +181,71 @@ class SelectionManager(QObject):
         self.selection_color = ThemeDetector.get_selection_color()
         self.selection_color_light = ThemeDetector.get_selection_color_lighter()
         
-        # Reapply selection with new colors if something is selected
-        if self._selected_item is not None:
-            # First remove old selection
-            self._deselect_current()
-            # Then reapply with new colors
-            self._apply_selection(self._selected_item)
+        # Reapply selection with new colors for all selected items
+        if self._selected_items:
+            for item in self._selected_items:
+                # First remove old selection
+                self._deselect_item(item)
+                # Then reapply with new colors
+                self._apply_selection(item)
+                
+    def _get_item_type(self, item: object) -> str:
+        """Determine the type of an item for selection rules"""
+        # Check if it's a line/arrow
+        from workflow_designer.wfd_scene import WFLineGroup
+        if isinstance(item, WFLineGroup) or hasattr(item, 'setSelected') and hasattr(item, 'show_nodes'):
+            return "LINE"
+        # Otherwise it's an entity (status or workflow)
+        else:
+            return "ENTITY"
+            
+    def _can_add_item_type(self, item_type: str) -> bool:
+        """Check if we can add this item type to current selection based on rules"""
+        if not self._selected_items:
+            return True  # First item, always allowed
+            
+        # Current mode must match the item type
+        return self._selection_mode == item_type
+        
+    def add_items_to_selection(self, items: Set[object]):
+        """Add multiple items to selection (for box selection)"""
+        if not items:
+            return
+            
+        # Separate items by type
+        entities = {item for item in items if self._get_item_type(item) == "ENTITY"}
+        lines = {item for item in items if self._get_item_type(item) == "LINE"}
+        
+        print(f"🎯 BOX SELECTION TYPE PRIORITY: {len(entities)} entities, {len(lines)} lines")
+        
+        # Priority rule: Entities take precedence over lines in box selection
+        if entities:
+            selected_items = entities
+            selected_type = "ENTITY"
+            print(f"✅ SELECTING ENTITIES (priority over lines)")
+        elif lines:
+            selected_items = lines  
+            selected_type = "LINE"
+            print(f"✅ SELECTING LINES (no entities found)")
+        else:
+            print(f"❌ NO VALID ITEMS TO SELECT")
+            return
+            
+        # If we have existing selection, check type compatibility
+        if self._selected_items and self._selection_mode != selected_type:
+            # Type mismatch - clear existing selection
+            print(f"🔄 TYPE MISMATCH: clearing existing {self._selection_mode} selection for {selected_type}")
+            self.deselect_all()
+            
+        # Add compatible items
+        for item in selected_items:
+            if item not in self._selected_items:
+                self._selected_items.add(item)
+                self._apply_selection(item)
+                
+        # Set mode if this was the first selection
+        if not self._selection_mode:
+            self._selection_mode = selected_type
+            
+        print(f"📊 FINAL SELECTION: {len(self._selected_items)} items of type {self._selection_mode}")
+        self.selectionChanged.emit(self._selected_items.copy())

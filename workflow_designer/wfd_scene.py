@@ -71,12 +71,12 @@ class WFEntity:
         
         # Connect click events to selection
         if self.shape:
-            self.shape.clicked.connect(lambda: self._handle_click())
+            self.shape.clicked.connect(self._handle_click)
     
-    def _handle_click(self):
+    def _handle_click(self, has_modifier: bool = False):
         """Handle entity click - select this entity"""
         if self._selection_manager:
-            self._selection_manager.select_item(self)
+            self._selection_manager.select_item(self, with_modifier=has_modifier)
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):

@@ -1,0 +1,425 @@
+----- DEBUG INFO FOR DRAG AND DROP -----
+🎯 MOUSE PRESS: pos=PySide6.QtCore.QPoint(869, 10), item=None                                                19:53:04 [154/1934]
+🎯 EMPTY SPACE CLICK: rubber_band_origin set to PySide6.QtCore.QPoint(869, 10)                                                  
+🎯 MODIFIER KEYS: False                                                                                                         
+🎯 DESELECTED ALL                                                                                                               
+qt.pointer.dispatch: skipping QEventPoint(id=1 ts=0 pos=0,0 scn=1079.88,401.843 gbl=1079.88,401.843 Released ellipse=(1x1 ∡ 0) v
+el=0,0 press=-1079.88,-401.843 last=-1079.88,-401.843 Δ 1079.88,401.843) : no target window                                     
+🔄 MOUSE MOVE: pos=PySide6.QtCore.QPoint(869, 10), origin=PySide6.QtCore.QPoint(869, 10), distance=0                            
+🔄 MOUSE MOVE: pos=PySide6.QtCore.QPoint(870, 12), origin=PySide6.QtCore.QPoint(869, 10), distance=3                            
+🟩 RUBBER BAND ACTIVATED: geometry=PySide6.QtCore.QRect(869, 10, 2, 3)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 2, 4)                                                             
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 3, 6)                                                             
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 4, 7)                                                             
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 6, 11)                                                            
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 9, 14)                                                            
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 12, 18)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 18, 23)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 26, 29)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 35, 36)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 45, 44)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 53, 51)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 59, 56)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 63, 59)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 67, 62)                                                           
+qt.pointer.dispatch: skipping QEventPoint(id=1 ts=0 pos=0,0 scn=1038.74,278.169 gbl=1038.74,278.169 Released ellipse=(1x1 ∡ 0) v
+el=0,0 press=-1038.74,-278.169 last=-1038.74,-278.169 Δ 1038.74,278.169) : no target window                                     
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 69, 63)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 70, 64)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 72, 67)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 79, 73)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 84, 79)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 93, 86)                                                           
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 106, 98)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 119, 109)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 130, 118)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 140, 126)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 146, 131)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 149, 134)                                                         
+qt.pointer.dispatch: skipping QEventPoint(id=1 ts=0 pos=0,0 scn=1100.52,343.229 gbl=1100.52,343.229 Released ellipse=(1x1 ∡ 0) v
+el=0,0 press=-1100.52,-343.229 last=-1100.52,-343.229 Δ 1100.52,343.229) : no target window                                     
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 151, 136)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 151, 137)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 154, 141)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 161, 150)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 166, 155)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 174, 163)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 184, 173)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 192, 179)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 196, 183)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 199, 185)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 200, 186)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 201, 186)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 203, 187)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 206, 189)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 209, 191)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 211, 193)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 212, 194)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 213, 195)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 215, 196)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 217, 198)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 220, 201)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 223, 203)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 225, 205)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 226, 205)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 227, 206)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 227, 206)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 227, 206)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 227, 206)                                                         
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(869, 10, 227, 205)                                                         
+qt.pointer.dispatch: skipping QEventPoint(id=1 ts=0 pos=0,0 scn=1178.63,419.271 gbl=1178.63,419.271 Released ellipse=(1x1 ∡ 0) v
+el=0,0 press=-1178.63,-419.271 last=-1178.63,-419.271 Δ 1178.63,419.271) : no target window                                     
+🏁 MOUSE RELEASE: Finishing rubber band selection                                                                               
+📦 WIDGET RECT: PySide6.QtCore.QRect(869, 10, 227, 205)                                                                         
+👁️ VIEW RECT: PySide6.QtCore.QRect(869, 10, 227, 205)                                                                           
+🌍 SCENE RECT: PySide6.QtCore.QRectF(858.000000, 45.000000, 226.000000, 204.000000)                                             
+🔍 BOX SELECTION: Checking items in scene_rect=PySide6.QtCore.QRectF(858.000000, 45.000000, 226.000000, 204.000000)             
+🔍 Checking 3 workflows and 22 statuses                                                                                         
+    🔍 Entity rect: PySide6.QtCore.QRectF(492.000000, 322.000000, 162.000000, 110.000000), intersects: False 
+  📋 Workflow 0: b408f3d5... in_rect=False                                                                    19:53:04 [77/1934]
+    🔍 Entity rect: PySide6.QtCore.QRectF(442.000000, 589.000000, 175.000000, 320.000000), intersects: False                    
+  📋 Workflow 1: 27c92a34... in_rect=False                                                                                      
+    🔍 Entity rect: PySide6.QtCore.QRectF(347.000000, 120.000000, 107.000000, 80.000000), intersects: False                     
+  📋 Workflow 2: 05843461... in_rect=False                                                                                      
+    🔍 Entity rect: PySide6.QtCore.QRectF(219.000000, 336.000000, 84.000000, 55.000000), intersects: False                      
+  ⭕ Status 0: 6539ec3e... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(783.000000, 664.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 1: 69dc4324... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(1151.000000, 574.000000, 86.000000, 55.000000), intersects: False                     
+  ⭕ Status 2: 41fffd31... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(213.000000, 218.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 3: b0b2c41a... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(767.000000, 496.000000, 72.000000, 55.000000), intersects: False                      
+  ⭕ Status 4: 8abd0b9a... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(1003.000000, 41.000000, 55.000000, 55.000000), intersects: True                       
+  ⭕ Status 5: 10d12405... in_rect=True                                                                                         
+    🔍 Entity rect: PySide6.QtCore.QRectF(976.000000, 355.000000, 87.000000, 55.000000), intersects: False                      
+  ⭕ Status 6: 5446ba81... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(769.000000, 331.000000, 70.000000, 55.000000), intersects: False                      
+  ⭕ Status 7: cabff69d... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(306.000000, 755.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 8: 9ff97f4b... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(978.000000, 578.000000, 82.000000, 55.000000), intersects: False                      
+  ⭕ Status 9: 7be4e6bf... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(605.000000, 79.000000, 55.000000, 55.000000), intersects: False                       
+  ⭕ Status 10: c1c8eaef... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(554.000000, 464.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 11: 255aa0b5... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(399.000000, 451.000000, 83.000000, 55.000000), intersects: False                      
+  ⭕ Status 12: 96705142... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(866.000000, 126.000000, 55.000000, 55.000000), intersects: True                       
+  ⭕ Status 13: 5564a343... in_rect=True                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(309.000000, 626.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 14: 575878ea... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1151.000000, 357.000000, 87.000000, 55.000000), intersects: False                     
+  ⭕ Status 15: d2ae6564... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(644.000000, 168.000000, 82.000000, 55.000000), intersects: False                      
+  ⭕ Status 16: 329b465c... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1013.000000, 214.000000, 55.000000, 55.000000), intersects: True                      
+  ⭕ Status 17: 8e162efd... in_rect=True                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(666.000000, 97.000000, 55.000000, 55.000000), intersects: False                       
+  ⭕ Status 18: 2e7fe2be... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(219.000000, 494.000000, 85.000000, 55.000000), intersects: False                      
+  ⭕ Status 19: bbd0c715... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1005.000000, 131.000000, 55.000000, 55.000000), intersects: True                      
+  ⭕ Status 20: 552ddb7c... in_rect=True                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(115.000000, 240.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 21: bcf68659... in_rect=False                                                                                       
+  ➡️ Line 0: in_rect=False                                                                                                      
+  ➡️ Line 1: in_rect=False                                                                                                      
+  ➡️ Line 2: in_rect=False                                                                                                      
+  ➡️ Line 3: in_rect=False                                                                                                      
+  ➡️ Line 4: in_rect=False                                                                                                      
+  ➡️ Line 5: in_rect=False                                                                                                      
+  ➡️ Line 6: in_rect=False                                                                                                      
+  ➡️ Line 7: in_rect=False                                                                                                      
+  ➡️ Line 8: in_rect=False                                                                                                      
+  ➡️ Line 9: in_rect=False                                                                                                      
+  ➡️ Line 10: in_rect=False                                                                                                     
+  ➡️ Line 11: in_rect=True                                                                                                      
+  ➡️ Line 12: in_rect=False                                                                                                     
+  ➡️ Line 13: in_rect=False                                                                                                     
+  ➡️ Line 14: in_rect=False                                                                                                     
+  ➡️ Line 15: in_rect=True                                                                                                      
+  ➡️ Line 16: in_rect=False                                                                                                     
+  ➡️ Line 17: in_rect=False                                                                                                     
+  ➡️ Line 18: in_rect=False                                                                                                     
+  ➡️ Line 19: in_rect=False                                                                                                     
+  ➡️ Line 20: in_rect=False                                                                                                     
+  ➡️ Line 21: in_rect=False                                                                                                     
+  ➡️ Line 22: in_rect=False                                                                                                     
+  ➡️ Line 23: in_rect=False                                                                                                     
+  ➡️ Line 24: in_rect=False                                                                                                     
+  ➡️ Line 25: in_rect=False                                                                                                     
+  ➡️ Line 26: in_rect=False                                                                                                     
+  ➡️ Line 27: in_rect=True 
+  ➡️ Line 28: in_rect=False
+  ➡️ Line 29: in_rect=False
+  ➡️ Line 30: in_rect=False
+  ➡️ Line 31: in_rect=True
+  ➡️ Line 32: in_rect=False
+  ➡️ Line 33: in_rect=False
+  ➡️ Line 34: in_rect=False
+  ➡️ Line 35: in_rect=False
+  ➡️ Line 36: in_rect=False
+  ➡️ Line 37: in_rect=False
+  ➡️ Line 38: in_rect=False
+  ➡️ Line 39: in_rect=False
+  ➡️ Line 40: in_rect=False
+  ➡️ Line 41: in_rect=False
+  ➡️ Line 42: in_rect=False
+  ➡️ Line 43: in_rect=False
+  ➡️ Line 44: in_rect=False
+  ➡️ Line 45: in_rect=False
+  ➡️ Line 46: in_rect=False
+  ➡️ Line 47: in_rect=False
+  ➡️ Line 48: in_rect=False
+  ➡️ Line 49: in_rect=False
+  ➡️ Line 50: in_rect=False
+  ➡️ Line 51: in_rect=False
+  ➡️ Line 52: in_rect=False
+  ➡️ Line 53: in_rect=False
+  ➡️ Line 54: in_rect=False
+  ➡️ Line 55: in_rect=False
+  ➡️ Line 56: in_rect=False
+  ➡️ Line 57: in_rect=False
+  ➡️ Line 58: in_rect=False
+  ➡️ Line 59: in_rect=False
+  ➡️ Line 60: in_rect=False
+  ➡️ Line 61: in_rect=True
+  ➡️ Line 62: in_rect=False
+  ➡️ Line 63: in_rect=False
+  ➡️ Line 64: in_rect=False
+  ➡️ Line 65: in_rect=False
+  ➡️ Line 66: in_rect=False
+  ➡️ Line 67: in_rect=False
+  ➡️ Line 68: in_rect=True
+  ➡️ Line 69: in_rect=False
+  ➡️ Line 70: in_rect=True
+  ➡️ Line 71: in_rect=False
+  ➡️ Line 72: in_rect=False
+  ➡️ Line 73: in_rect=False
+  ➡️ Line 74: in_rect=True
+  ➡️ Line 75: in_rect=False
+  ➡️ Line 76: in_rect=True
+  ➡️ Line 77: in_rect=True
+  ➡️ Line 78: in_rect=False
+  ➡️ Line 79: in_rect=False
+  ➡️ Line 80: in_rect=False
+  ➡️ Line 81: in_rect=False
+  ➡️ Line 82: in_rect=False
+  ➡️ Line 83: in_rect=False
+  ➡️ Line 84: in_rect=False
+  ➡️ Line 85: in_rect=False
+  ➡️ Line 86: in_rect=False
+  ➡️ Line 87: in_rect=False
+  ➡️ Line 88: in_rect=False
+  ➡️ Line 89: in_rect=False
+  ➡️ Line 90: in_rect=False
+  ➡️ Line 91: in_rect=False
+  ➡️ Line 92: in_rect=False
+  ➡️ Line 93: in_rect=False
+  ➡️ Line 94: in_rect=False
+  ➡️ Line 95: in_rect=False
+  ➡️ Line 96: in_rect=False
+  ➡️ Line 97: in_rect=False
+📊 SELECTION RESULTS: 4 entities, 10 lines
+✅ SELECTING 14 items
+
+----- Debug for status selection and drag -----
+🎯 MOUSE PRESS: pos=PySide6.QtCore.QPoint(808, 325), item=QGraphicsTextItem                                                     
+🎯 CLICKED ON ITEM: QGraphicsTextItem                                                                                           
+qt.pointer.dispatch: skipping QEventPoint(id=1 ts=0 pos=0,0 scn=968.48,458.246 gbl=968.48,458.246 Released ellipse=(1x1 ∡ 0) vel
+=0,0 press=-968.48,-458.246 last=-968.48,-458.246 Δ 968.48,458.246) : no target window                                          
+🔄 MOUSE MOVE: pos=PySide6.QtCore.QPoint(808, 325), origin=PySide6.QtCore.QPoint(869, 10), distance=376                         
+🟩 RUBBER BAND ACTIVATED: geometry=PySide6.QtCore.QRect(809, 10, 60, 316)                                                       
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(810, 10, 59, 316)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(810, 10, 59, 316)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(811, 10, 58, 316)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(813, 10, 56, 317)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(814, 10, 55, 317)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(815, 10, 54, 318)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(816, 10, 53, 318)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(817, 10, 52, 318)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(818, 10, 51, 319)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(820, 10, 49, 319)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(821, 10, 48, 320)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(822, 10, 47, 320)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(824, 10, 45, 321)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(826, 10, 43, 322)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(827, 10, 42, 323)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(828, 10, 41, 323)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(829, 10, 40, 324)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(830, 10, 39, 324)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(831, 10, 38, 325)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(831, 10, 38, 325)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(831, 10, 38, 326)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(832, 10, 37, 326)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(832, 10, 37, 327)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(833, 10, 36, 327)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(834, 10, 35, 327)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(834, 10, 35, 328)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(834, 10, 35, 328)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(834, 10, 35, 328)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(835, 10, 34, 328)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(835, 10, 34, 329)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(835, 10, 34, 329)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(835, 10, 34, 329)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(835, 10, 34, 329)                                                          
+🟦 RUBBER BAND UPDATE: geometry=PySide6.QtCore.QRect(836, 10, 33, 329)                                                          
+🏁 MOUSE RELEASE: Finishing rubber band selection                                                                               
+📦 WIDGET RECT: PySide6.QtCore.QRect(836, 10, 33, 329)                                                                          
+👁️ VIEW RECT: PySide6.QtCore.QRect(836, 10, 33, 329)                                                                            
+🌍 SCENE RECT: PySide6.QtCore.QRectF(825.000000, 45.000000, 32.000000, 328.000000)                                              
+🔍 BOX SELECTION: Checking items in scene_rect=PySide6.QtCore.QRectF(825.000000, 45.000000, 32.000000, 328.000000)              
+🔍 Checking 3 workflows and 22 statuses                                                                                         
+    🔍 Entity rect: PySide6.QtCore.QRectF(492.000000, 322.000000, 162.000000, 110.000000), intersects: False 
+  📋 Workflow 0: b408f3d5... in_rect=False                                                                                      
+    🔍 Entity rect: PySide6.QtCore.QRectF(442.000000, 589.000000, 175.000000, 320.000000), intersects: False                    
+  📋 Workflow 1: 27c92a34... in_rect=False                                                                                      
+    🔍 Entity rect: PySide6.QtCore.QRectF(347.000000, 120.000000, 107.000000, 80.000000), intersects: False                     
+  📋 Workflow 2: 05843461... in_rect=False                                                                                      
+    🔍 Entity rect: PySide6.QtCore.QRectF(219.000000, 336.000000, 84.000000, 55.000000), intersects: False                      
+  ⭕ Status 0: 6539ec3e... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(783.000000, 664.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 1: 69dc4324... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(1151.000000, 574.000000, 86.000000, 55.000000), intersects: False                     
+  ⭕ Status 2: 41fffd31... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(213.000000, 218.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 3: b0b2c41a... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(767.000000, 496.000000, 72.000000, 55.000000), intersects: False                      
+  ⭕ Status 4: 8abd0b9a... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(1003.000000, 41.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 5: 10d12405... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(976.000000, 355.000000, 87.000000, 55.000000), intersects: False                      
+  ⭕ Status 6: 5446ba81... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(795.500000, 343.500000, 71.000000, 56.000000), intersects: True                       
+  ⭕ Status 7: cabff69d... in_rect=True                                                                                         
+    🔍 Entity rect: PySide6.QtCore.QRectF(306.000000, 755.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 8: 9ff97f4b... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(978.000000, 578.000000, 82.000000, 55.000000), intersects: False                      
+  ⭕ Status 9: 7be4e6bf... in_rect=False                                                                                        
+    🔍 Entity rect: PySide6.QtCore.QRectF(605.000000, 79.000000, 55.000000, 55.000000), intersects: False                       
+  ⭕ Status 10: c1c8eaef... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(554.000000, 464.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 11: 255aa0b5... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(399.000000, 451.000000, 83.000000, 55.000000), intersects: False                      
+  ⭕ Status 12: 96705142... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(866.000000, 126.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 13: 5564a343... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(309.000000, 626.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 14: 575878ea... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1151.000000, 357.000000, 87.000000, 55.000000), intersects: False                     
+  ⭕ Status 15: d2ae6564... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(644.000000, 168.000000, 82.000000, 55.000000), intersects: False                      
+  ⭕ Status 16: 329b465c... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1013.000000, 214.000000, 55.000000, 55.000000), intersects: False                     
+  ⭕ Status 17: 8e162efd... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(666.000000, 97.000000, 55.000000, 55.000000), intersects: False                       
+  ⭕ Status 18: 2e7fe2be... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(219.000000, 494.000000, 85.000000, 55.000000), intersects: False                      
+  ⭕ Status 19: bbd0c715... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(1005.000000, 131.000000, 55.000000, 55.000000), intersects: False                     
+  ⭕ Status 20: 552ddb7c... in_rect=False                                                                                       
+    🔍 Entity rect: PySide6.QtCore.QRectF(115.000000, 240.000000, 55.000000, 55.000000), intersects: False                      
+  ⭕ Status 21: bcf68659... in_rect=False                                                                                       
+  ➡️ Line 0: in_rect=False                                                                                                      
+  ➡️ Line 1: in_rect=False                                                                                                      
+  ➡️ Line 2: in_rect=False                                                                                                      
+  ➡️ Line 3: in_rect=False                                                                                                      
+  ➡️ Line 4: in_rect=False                                                                                                      
+  ➡️ Line 5: in_rect=False                                                                                                      
+  ➡️ Line 6: in_rect=False                                                                                                      
+  ➡️ Line 7: in_rect=False                                                                                                      
+  ➡️ Line 8: in_rect=False                                                                                                      
+  ➡️ Line 9: in_rect=False                                                                                                      
+  ➡️ Line 10: in_rect=False                                                                                                     
+  ➡️ Line 11: in_rect=True                                                                                                      
+  ➡️ Line 12: in_rect=False                                                                                                     
+  ➡️ Line 13: in_rect=False                                                                                                     
+  ➡️ Line 14: in_rect=False                                                                                                     
+  ➡️ Line 15: in_rect=False                                                                                                     
+  ➡️ Line 16: in_rect=False                                                                                                     
+  ➡️ Line 17: in_rect=False                                                                                                     
+  ➡️ Line 18: in_rect=False                                                                                                     
+  ➡️ Line 19: in_rect=False                                                                                                     
+  ➡️ Line 20: in_rect=False                                                                                                     
+  ➡️ Line 21: in_rect=False
+  ➡️ Line 22: in_rect=False
+  ➡️ Line 23: in_rect=False
+  ➡️ Line 24: in_rect=False
+  ➡️ Line 25: in_rect=False
+  ➡️ Line 26: in_rect=False
+  ➡️ Line 27: in_rect=True
+  ➡️ Line 28: in_rect=False
+  ➡️ Line 29: in_rect=False
+  ➡️ Line 30: in_rect=False
+  ➡️ Line 31: in_rect=True
+  ➡️ Line 32: in_rect=False
+  ➡️ Line 33: in_rect=False
+  ➡️ Line 34: in_rect=False
+  ➡️ Line 35: in_rect=False
+  ➡️ Line 36: in_rect=False
+  ➡️ Line 37: in_rect=False
+  ➡️ Line 38: in_rect=False
+  ➡️ Line 39: in_rect=False
+  ➡️ Line 40: in_rect=False
+  ➡️ Line 41: in_rect=False
+  ➡️ Line 42: in_rect=False
+  ➡️ Line 43: in_rect=False
+  ➡️ Line 44: in_rect=False
+  ➡️ Line 45: in_rect=False
+  ➡️ Line 46: in_rect=False
+  ➡️ Line 47: in_rect=False
+  ➡️ Line 48: in_rect=False
+  ➡️ Line 49: in_rect=False
+  ➡️ Line 50: in_rect=False
+  ➡️ Line 51: in_rect=False
+  ➡️ Line 52: in_rect=False
+  ➡️ Line 53: in_rect=False
+  ➡️ Line 54: in_rect=False
+  ➡️ Line 55: in_rect=False
+  ➡️ Line 56: in_rect=False
+  ➡️ Line 57: in_rect=False
+  ➡️ Line 58: in_rect=False
+  ➡️ Line 59: in_rect=False
+  ➡️ Line 60: in_rect=False
+  ➡️ Line 61: in_rect=True
+  ➡️ Line 62: in_rect=False
+  ➡️ Line 63: in_rect=False
+  ➡️ Line 64: in_rect=False
+  ➡️ Line 65: in_rect=False
+  ➡️ Line 66: in_rect=False
+  ➡️ Line 67: in_rect=False
+  ➡️ Line 68: in_rect=False
+  ➡️ Line 69: in_rect=False
+  ➡️ Line 70: in_rect=False
+  ➡️ Line 71: in_rect=False
+  ➡️ Line 72: in_rect=False
+  ➡️ Line 73: in_rect=False
+  ➡️ Line 74: in_rect=False
+  ➡️ Line 75: in_rect=False
+  ➡️ Line 76: in_rect=True
+  ➡️ Line 77: in_rect=True
+  ➡️ Line 78: in_rect=False
+  ➡️ Line 79: in_rect=False
+  ➡️ Line 80: in_rect=False
+  ➡️ Line 81: in_rect=False
+  ➡️ Line 82: in_rect=False
+  ➡️ Line 83: in_rect=False
+  ➡️ Line 84: in_rect=False
+  ➡️ Line 85: in_rect=False
+  ➡️ Line 86: in_rect=False
+  ➡️ Line 87: in_rect=False
+  ➡️ Line 88: in_rect=False
+  ➡️ Line 89: in_rect=False
+  ➡️ Line 90: in_rect=False
+  ➡️ Line 91: in_rect=False
+  ➡️ Line 92: in_rect=False
+  ➡️ Line 93: in_rect=False
+  ➡️ Line 94: in_rect=False
+  ➡️ Line 95: in_rect=False
+  ➡️ Line 96: in_rect=False
+  ➡️ Line 97: in_rect=False
+📊 SELECTION RESULTS: 1 entities, 6 lines
+✅ SELECTING 7 items

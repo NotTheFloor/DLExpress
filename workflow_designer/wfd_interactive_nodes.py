@@ -617,23 +617,15 @@ class LineNodeManager(QObject):
     def check_for_merges(self):
         """Check if any three consecutive points form a straight line and merge if so"""
         waypoints = self.arrow.get_interactive_waypoints()
-        print(f"🔍 MERGE CHECK: Starting with {len(waypoints)} waypoints")
-        for wp in waypoints:
-            print(f"   - Waypoint {wp.node_id[:8]}... at ({wp.x:.1f}, {wp.y:.1f}), user_created: {wp.is_user_created}")
-        
         if len(waypoints) < 1:
-            print("🔍 MERGE CHECK: No waypoints to check, skipping")
             return
             
         path_points = self.arrow.get_current_path_points()
-        print(f"🔍 MERGE CHECK: Path has {len(path_points)} points")
         if len(path_points) < 3:
-            print("🔍 MERGE CHECK: Not enough path points, skipping")
             return
         
         # First check for complete line straightness (more aggressive merging)
         if self._is_entire_line_straight(path_points):
-            print("🔍 MERGE CHECK: Entire line is straight - removing ALL waypoints (including XML)")
             # If the entire line is straight, remove ALL waypoints (including XML ones)
             self._remove_all_waypoints(waypoints)
             return
@@ -646,14 +638,9 @@ class LineNodeManager(QObject):
             current_point = path_points[i]
             next_point = path_points[i + 1]
             
-            print(f"🔍 MERGE CHECK: Checking triplet {i}: {prev_point} -> {current_point} -> {next_point}")
-            should_merge = self._should_merge_points(prev_point, current_point, next_point)
-            print(f"🔍 MERGE CHECK: Should merge? {should_merge}")
-            
-            if should_merge:
+            if self._should_merge_points(prev_point, current_point, next_point):
                 # Find corresponding waypoint to remove using improved matching
                 waypoint_to_remove = self._find_waypoint_by_position(waypoints, current_point)
-                print(f"🔍 MERGE CHECK: Found waypoint to remove: {waypoint_to_remove.node_id[:8] if waypoint_to_remove else 'None'}")
                 if waypoint_to_remove:
                     # Allow merging of both user-created AND XML waypoints when they're straightened
                     # This enables XML-loaded lines to be simplified when manually straightened
