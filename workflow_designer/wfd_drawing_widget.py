@@ -1,11 +1,18 @@
 import random
 
 from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout, QGraphicsScene, QRubberBand
-from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics
+from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics, QSurfaceFormat
 from PySide6.QtCore import QPoint, QRect, Qt, QRectF
+
+try:
+    from PySide6.QtOpenGLWidgets import QOpenGLWidget
+    OPENGL_AVAILABLE = True
+except ImportError:
+    OPENGL_AVAILABLE = False
 
 from .wfd_utilities import drawArrow
 from .wfd_logger import logger
+from .wfd_rendering_config import RenderingOptimizer, default_config
 
 _DEF_DW_SZ_X = 1400
 _DEF_DW_SZ_Y = 900
@@ -19,6 +26,11 @@ class CustomGraphicsView(QGraphicsView):
         super().__init__(parent)
         self._wf_scene = None  # Reference to WFScene for selection manager access
         
+        # Enable anti-aliasing for smooth lines and shapes
+        self.setRenderHints(QPainter.RenderHint.Antialiasing | 
+                           QPainter.RenderHint.SmoothPixmapTransform |
+                           QPainter.RenderHint.TextAntialiasing)
+        
         # Rubber band selection
         self._rubber_band = QRubberBand(QRubberBand.Rectangle, self)
         self._rubber_band_origin = QPoint()
@@ -28,6 +40,41 @@ class CustomGraphicsView(QGraphicsView):
     def set_wf_scene(self, wf_scene):
         """Set the workflow scene reference for selection handling"""
         self._wf_scene = wf_scene
+    
+    def enable_opengl_antialiasing(self, samples=4):
+        """
+        Enable OpenGL viewport with multisampling anti-aliasing.
+        
+        Args:
+            samples (int): Number of MSAA samples (4, 8, 16). Higher = better quality but slower.
+        
+        Returns:
+            bool: True if OpenGL was successfully enabled, False otherwise
+        """
+        if not OPENGL_AVAILABLE:
+            logger.warning("OpenGL widgets not available - falling back to standard rendering")
+            return False
+            
+        try:
+            # Create OpenGL widget with MSAA format
+            opengl_widget = QOpenGLWidget()
+            
+            # Configure surface format for anti-aliasing
+            surface_format = QSurfaceFormat()
+            surface_format.setSamples(samples)  # MSAA samples
+            surface_format.setDepthBufferSize(24)
+            surface_format.setStencilBufferSize(8)
+            opengl_widget.setFormat(surface_format)
+            
+            # Set as viewport
+            self.setViewport(opengl_widget)
+            
+            logger.info(f"OpenGL viewport enabled with {samples}x MSAA")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to enable OpenGL viewport: {e}")
+            return False
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -156,11 +203,13 @@ class CustomGraphicsView(QGraphicsView):
 
 
 class DrawingWidget(QFrame):
-    def __init__(self, sceneDict: dict, sceneManagerDict: dict = None, initial_workflow_key: str = None, parent=None):
+    def __init__(self, sceneDict: dict, sceneManagerDict: dict = None, initial_workflow_key: str = None, enable_opengl=True, parent=None):
         super().__init__(parent)
 
         self.sceneDict: dict = sceneDict  # Qt graphics scenes
         self.sceneManagerDict: dict = sceneManagerDict or {}  # WFScene objects
+        self.rendering_optimizer = RenderingOptimizer(default_config)
+        
         # Use provided initial workflow key, or fall back to first available key
         if initial_workflow_key and initial_workflow_key in sceneDict:
             self.currentWorkflow = initial_workflow_key
@@ -175,6 +224,9 @@ class DrawingWidget(QFrame):
 
         self.view = CustomGraphicsView()
         layout.addWidget(self.view)
+        
+        # Configure rendering based on scene complexity
+        self._configure_rendering_quality()
 
         # Set initial scene if we have workflows
         if self.currentWorkflow:
@@ -183,6 +235,39 @@ class DrawingWidget(QFrame):
             # Set the WFScene reference if available
             if self.currentWorkflow in self.sceneManagerDict:
                 self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
+    
+    def _get_current_scene_item_count(self) -> int:
+        """Get the number of items in the current scene for performance optimization"""
+        if not self.currentWorkflow or self.currentWorkflow not in self.sceneDict:
+            return 0
+            
+        scene = self.sceneDict[self.currentWorkflow]
+        return len(scene.items()) if scene else 0
+    
+    def _configure_rendering_quality(self):
+        """Configure rendering quality based on scene complexity and user preferences"""
+        item_count = self._get_current_scene_item_count()
+        settings = self.rendering_optimizer.get_optimized_settings(item_count)
+        
+        # Apply OpenGL settings if enabled
+        opengl_enabled = False
+        if settings['enable_opengl'] and OPENGL_AVAILABLE:
+            opengl_enabled = self.view.enable_opengl_antialiasing(samples=settings['msaa_samples'])
+        
+        # Log rendering configuration
+        perf_info = self.rendering_optimizer.get_performance_info(item_count)
+        if opengl_enabled:
+            logger.info(f"Rendering configured: {perf_info}")
+        else:
+            logger.info(f"Rendering configured: Basic anti-aliasing (OpenGL {'disabled' if not settings['enable_opengl'] else 'unavailable'})")
+        
+        # Show performance warning if needed
+        if settings['show_performance_warning']:
+            logger.warning(f"Large workflow ({item_count} items) - using reduced quality settings for better performance")
+    
+    def refresh_rendering_settings(self):
+        """Refresh rendering settings - useful after scene changes or preference updates"""
+        self._configure_rendering_quality()
 
 
     def change_workflow(self, wfTitle):
@@ -193,6 +278,9 @@ class DrawingWidget(QFrame):
         # Update WFScene reference when switching workflows
         if self.currentWorkflow in self.sceneManagerDict:
             self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
+            
+        # Reconfigure rendering for the new workflow's complexity
+        self.refresh_rendering_settings()
 
     def unused(self):
         painter = QPainter(self)

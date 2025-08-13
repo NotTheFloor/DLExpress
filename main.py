@@ -6,6 +6,7 @@ os.environ["QT_LOGGING_RULES"] = "qt.pointer.dispatch.debug=false"
 from typing import Optional   
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QVBoxLayout
+from PySide6.QtGui import QSurfaceFormat
 
 from workflow_designer.wfd_window import WorkflowDesignerWindow
 from connect_window import ConnectWindow
@@ -51,9 +52,33 @@ class MainWindow(QMainWindow):
         quit()
 
 
-if __name__ == "__main__":
-    # Going to do some xml testing here
+def setup_global_antialiasing():
+    """
+    Configure global surface format for optimal rendering quality.
+    Must be called before QApplication creation.
+    """
+    try:
+        # Set up global surface format for all OpenGL contexts
+        surface_format = QSurfaceFormat()
+        surface_format.setSamples(4)  # 4x MSAA - good balance of quality vs performance
+        surface_format.setDepthBufferSize(24)
+        surface_format.setStencilBufferSize(8)
+        
+        # Set as default format for all OpenGL contexts
+        QSurfaceFormat.setDefaultFormat(surface_format)
+        print(f"Global anti-aliasing configured: 4x MSAA")
+        return True
+        
+    except Exception as e:
+        print(f"Warning: Could not set global surface format: {e}")
+        return False
 
+
+if __name__ == "__main__":
+    # Configure global anti-aliasing BEFORE creating QApplication
+    setup_global_antialiasing()
+    
+    # Going to do some xml testing here
     app = QApplication([])
     main_window = MainWindow()
     main_window.show()
