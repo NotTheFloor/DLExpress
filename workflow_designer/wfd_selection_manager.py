@@ -216,25 +216,19 @@ class SelectionManager(QObject):
         entities = {item for item in items if self._get_item_type(item) == "ENTITY"}
         lines = {item for item in items if self._get_item_type(item) == "LINE"}
         
-        print(f"🎯 BOX SELECTION TYPE PRIORITY: {len(entities)} entities, {len(lines)} lines")
-        
         # Priority rule: Entities take precedence over lines in box selection
         if entities:
             selected_items = entities
             selected_type = "ENTITY"
-            print(f"✅ SELECTING ENTITIES (priority over lines)")
         elif lines:
             selected_items = lines  
             selected_type = "LINE"
-            print(f"✅ SELECTING LINES (no entities found)")
         else:
-            print(f"❌ NO VALID ITEMS TO SELECT")
             return
             
         # If we have existing selection, check type compatibility
         if self._selected_items and self._selection_mode != selected_type:
             # Type mismatch - clear existing selection
-            print(f"🔄 TYPE MISMATCH: clearing existing {self._selection_mode} selection for {selected_type}")
             self.deselect_all()
             
         # Add compatible items
@@ -247,5 +241,4 @@ class SelectionManager(QObject):
         if not self._selection_mode:
             self._selection_mode = selected_type
             
-        print(f"📊 FINAL SELECTION: {len(self._selected_items)} items of type {self._selection_mode}")
         self.selectionChanged.emit(self._selected_items.copy())

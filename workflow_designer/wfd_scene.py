@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TypedDict, TYPE_CHECKING
+from typing import Optional, TypedDict, TYPE_CHECKING, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
@@ -80,11 +80,13 @@ class WFEntity:
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
-    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None):
+    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None, statusObjects: list = None):
         super().__init__(entityKey, EntityType.WORKFLOW)
 
         self.title = title
         self.statuses = statuses
+        self.statusObjects = statusObjects or []  # Full status objects with keys
+        self.status_positions = {}  # Maps statusKey -> (x, y, height)
 
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeRect(rect, fillColor=fillColor, drawColor=drawColor)
@@ -98,19 +100,56 @@ class WFWorkflow(WFEntity):
         self.textItems.append(titleItem)
         yPadding = (titleItem.boundingRect().height() - QFontMetrics(titleItem.font()).height()) / 2
 
+        # Create status text items and build position mapping
         for i, statusLine in enumerate(self.statuses):
             statusItem = QGraphicsTextItem(statusLine, parent=self.shape.graphicsItem)
 
             if titleFont:
                 statusItem.setFont(createFontFromWFDFont(titleFont))
 
-            statusItem.setPos(DEF_ITM_X_PAD, (titleItem.boundingRect().height() - yPadding) * (i+1))
+            y_pos = (titleItem.boundingRect().height() - yPadding) * (i+1)
+            statusItem.setPos(DEF_ITM_X_PAD, y_pos)
             statusItem.setZValue(2)
             
             self.textItems.append(statusItem)
+            
+            # Map status key to position if we have status objects
+            if i < len(self.statusObjects):
+                status_obj = self.statusObjects[i]
+                # Get status key from WorkflowActivity object
+                status_key = getattr(status_obj, 'WorkflowActivityKey', None)
+                if status_key:
+                    text_height = statusItem.boundingRect().height()
+                    self.status_positions[str(status_key).upper()] = (DEF_ITM_X_PAD, y_pos, text_height)
 
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
+        
+    def getStatusLineAttachmentPoint(self, statusKey: str) -> Optional[Tuple[float, float]]:
+        """Get line attachment point for specific status within this workflow"""
+        status_key_upper = str(statusKey).upper()
+        
+        if status_key_upper not in self.status_positions:
+            # Fallback to center if status not found
+            return None
+            
+        x, y, height = self.status_positions[status_key_upper]
+        
+        # Get current workflow bounds in scene coordinates
+        bounds = self.shape.getCurrentBounds()
+        workflow_left, workflow_top, workflow_width, workflow_height = bounds
+        
+        # Calculate attachment point: middle of status text line
+        attachment_x = workflow_left + x + (workflow_width - DEF_ITM_X_PAD) / 2  # Use right edge for now
+        attachment_y = workflow_top + y + (height / 2)  # Middle of text line
+        
+        return attachment_x, attachment_y
+        
+    def _calculateStatusPositions(self):
+        """Recalculate status positions if font or layout changes"""
+        # This method can be called to refresh positions if needed
+        # Implementation would recalculate based on current text items
+        pass
 
 
 class WFStatus(WFEntity):
@@ -144,6 +183,10 @@ class WFLineGroup:
         self.dstEntity = dstEntity
         self.linkData = linkData
 
+        # Extract status keys from link data for workflow line alignment
+        self.srcStatusKey = self._extractStatusKey('OrgKey') if linkData else None
+        self.dstStatusKey = self._extractStatusKey('DstKey') if linkData else None
+
         self.lineSegments: list = []  # Will contain both ShapeLine and graphics items
 
         # Extract waypoints from XML Point elements
@@ -151,7 +194,7 @@ class WFLineGroup:
 
         # Always use MultiSegmentArrow for consistent interactive node support
         # MultiSegmentArrow handles the case of 0 waypoints correctly
-        self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints)
+        self.arrow = MultiSegmentArrow(srcEntity, dstEntity, waypoints, self.srcStatusKey, self.dstStatusKey)
         # Add all graphics items from multi-segment arrow
         self.lineSegments.extend(self.arrow.getGraphicsItems())
     
@@ -192,6 +235,14 @@ class WFLineGroup:
                     logger.warning(f"Invalid point data in link: {point}, error: {e}")
                     
         return waypoints
+    
+    def _extractStatusKey(self, keyType: str) -> Optional[str]:
+        """Extract status key from link data (OrgKey or DstKey)"""
+        if not self.linkData or keyType not in self.linkData.linkAttribs.get("LayoutLink", {}):
+            return None
+            
+        key = self.linkData.linkAttribs["LayoutLink"][keyType]
+        return str(key).upper() if key else None
 
 class WFScene:
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
@@ -243,7 +294,10 @@ class WFScene:
                 if get_object_from_list(self.workflows, "entityKey", nodeKey):
                     raise ValueError(f"Duplicate node key in workflows: {nodeKey}")
 
-                self.workflows.append(convertWorkflowFromXML(node, self.sceneManager.workflowStatuses[nodeKey.upper()]))
+                # Get status objects instead of just titles
+                status_sequence = self.sceneManager.getStatusSequence(nodeKey)
+                status_titles = [st.Title for st in status_sequence]
+                self.workflows.append(convertWorkflowFromXML(node, status_titles, status_sequence))
 
                 # We need to add statuses
 
@@ -332,7 +386,7 @@ def convertStatusFromXML(node: Node) -> WFStatus:
         )
 
 
-def convertWorkflowFromXML(node: Node, statuses: list[str]) -> WFWorkflow:
+def convertWorkflowFromXML(node: Node, statuses: list[str], statusObjects: list = None) -> WFWorkflow:
     font = DEFAULT_FONT
     if 'Font' in node.nodeAttribs:
         font = WFDFont(**node.nodeAttribs['Font'])
@@ -353,7 +407,8 @@ def convertWorkflowFromXML(node: Node, statuses: list[str]) -> WFWorkflow:
             node.nodeRect,
             font,
             fillColor=fillColor,
-            drawColor=drawColor
+            drawColor=drawColor,
+            statusObjects=statusObjects
         )
 
 def createFontFromWFDFont(wfdFont):

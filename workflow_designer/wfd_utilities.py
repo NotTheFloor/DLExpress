@@ -55,6 +55,32 @@ def findCircleEdgeIntersection(centerX: float, centerY: float, radiusX: float, r
     return intersectX, intersectY
 
 
+def findRectangleEdgeIntersectionForStatus(rectLeft: float, rectTop: float, rectWidth: float, rectHeight: float,
+                                          lineStartX: float, lineStartY: float, lineEndX: float, lineEndY: float, 
+                                          targetY: Optional[float] = None) -> Tuple[float, float]:
+    """
+    Find where a line intersects a rectangle edge, with optional Y-targeting for specific status lines.
+    If targetY is provided, prioritizes intersection points near that Y coordinate.
+    """
+    rectRight = rectLeft + rectWidth
+    rectBottom = rectTop + rectHeight
+    
+    # If targetY is specified and within rectangle bounds, use it
+    if targetY is not None and rectTop <= targetY <= rectBottom:
+        # Determine which side of rectangle to exit from based on line direction
+        centerX = rectLeft + rectWidth / 2
+        
+        if lineEndX < centerX:
+            # Line going left, use left edge
+            return rectLeft, targetY
+        else:
+            # Line going right, use right edge  
+            return rectRight, targetY
+    
+    # Fall back to original algorithm for center-based intersection
+    return findRectangleEdgeIntersection(rectLeft, rectTop, rectWidth, rectHeight, 
+                                       lineStartX, lineStartY, lineEndX, lineEndY)
+
 def findRectangleEdgeIntersection(rectLeft: float, rectTop: float, rectWidth: float, rectHeight: float,
                                   lineStartX: float, lineStartY: float, lineEndX: float, lineEndY: float) -> Tuple[float, float]:
     """
@@ -161,6 +187,73 @@ def calculateLineEndpoints(srcEntity: "WFEntity", dstEntity: "WFEntity") -> Tupl
     return (startX, startY), (endX, endY)
 
 
+def calculateLineEndpointsWithStatus(srcEntity: "WFEntity", dstEntity: "WFEntity", 
+                                   srcStatusKey: Optional[str] = None, dstStatusKey: Optional[str] = None) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    """
+    Calculate line endpoints with optional status-specific positioning for workflows.
+    If statusKey is provided and entity is a workflow, line will align with specific status text.
+    Falls back to center-based calculation if status not found or entity is not a workflow.
+    """
+    from workflow_designer.wfd_scene import EntityType
+    
+    # Get current entity centers (dynamic positions)
+    srcCenterX, srcCenterY = srcEntity.shape.getCurrentCenter()
+    dstCenterX, dstCenterY = dstEntity.shape.getCurrentCenter()
+    
+    # Calculate start point (where line exits source entity)
+    if srcEntity.entityType == EntityType.STATUS:  # Ellipse/Circle
+        # Use original radii (shape doesn't change, only position)
+        startX, startY = findCircleEdgeIntersection(
+            srcCenterX, srcCenterY, 
+            srcEntity.shape.rect.rx, srcEntity.shape.rect.ry,
+            srcCenterX, srcCenterY, dstCenterX, dstCenterY
+        )
+    else:  # Rectangle (Workflow)
+        # Check if we have a status key and can get specific positioning
+        srcLeft, srcTop, srcWidth, srcHeight = srcEntity.shape.getCurrentBounds()
+        
+        # Try to get status-specific attachment point
+        statusY = None
+        if srcStatusKey and hasattr(srcEntity, 'getStatusLineAttachmentPoint'):
+            attachment = srcEntity.getStatusLineAttachmentPoint(srcStatusKey)
+            if attachment:
+                # Use the Y coordinate from the status attachment point
+                statusY = attachment[1]
+        
+        startX, startY = findRectangleEdgeIntersectionForStatus(
+            srcLeft, srcTop, srcWidth, srcHeight,
+            srcCenterX, srcCenterY, dstCenterX, dstCenterY,
+            targetY=statusY
+        )
+    
+    # Calculate end point (where line enters destination entity)
+    if dstEntity.entityType == EntityType.STATUS:  # Ellipse/Circle
+        # Use original radii (shape doesn't change, only position)
+        endX, endY = findCircleEdgeIntersection(
+            dstCenterX, dstCenterY,
+            dstEntity.shape.rect.rx, dstEntity.shape.rect.ry,
+            dstCenterX, dstCenterY, srcCenterX, srcCenterY
+        )
+    else:  # Rectangle (Workflow)
+        dstLeft, dstTop, dstWidth, dstHeight = dstEntity.shape.getCurrentBounds()
+        
+        # Try to get status-specific attachment point
+        statusY = None
+        if dstStatusKey and hasattr(dstEntity, 'getStatusLineAttachmentPoint'):
+            attachment = dstEntity.getStatusLineAttachmentPoint(dstStatusKey)
+            if attachment:
+                # Use the Y coordinate from the status attachment point
+                statusY = attachment[1]
+                
+        endX, endY = findRectangleEdgeIntersectionForStatus(
+            dstLeft, dstTop, dstWidth, dstHeight,
+            dstCenterX, dstCenterY, srcCenterX, srcCenterY,
+            targetY=statusY
+        )
+    
+    return (startX, startY), (endX, endY)
+
+
 # Inspired by https://forum.qt.io/topic/109749/how-to-create-an-arrow-in-qt/6
 # Probably worth converting all to Q primitives (QPointF, QLineF, etc.)
 def drawArrow(painter: QPainter, srcPoint: tuple, dstPoint: tuple, headSize: int = 5):
@@ -233,11 +326,13 @@ class SmartArrow(QObject):
     
     clicked = Signal()
     
-    def __init__(self, srcEntity: "WFEntity", dstEntity: "WFEntity", parent=None):
+    def __init__(self, srcEntity: "WFEntity", dstEntity: "WFEntity", srcStatusKey: Optional[str] = None, dstStatusKey: Optional[str] = None, parent=None):
         super().__init__(parent)
         
         self.srcEntity = srcEntity
         self.dstEntity = dstEntity
+        self.srcStatusKey = srcStatusKey  # Status key for source entity line alignment
+        self.dstStatusKey = dstStatusKey  # Status key for destination entity line alignment
         self.headSize = 8
         
         # Create the graphics items
@@ -277,8 +372,8 @@ class SmartArrow(QObject):
     def updateGeometry(self):
         """Recalculate line and arrow positions based on current entity positions"""
         try:
-            # Calculate proper edge intersection points
-            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            # Calculate proper edge intersection points with status awareness
+            startPoint, endPoint = calculateLineEndpointsWithStatus(self.srcEntity, self.dstEntity, self.srcStatusKey, self.dstStatusKey)
             
             # Update line geometry
             self.lineItem.setLine(startPoint[0], startPoint[1], endPoint[0], endPoint[1])
@@ -412,11 +507,13 @@ class MultiSegmentArrow(QObject):
     
     clicked = Signal()
     
-    def __init__(self, srcEntity: "WFEntity", dstEntity: "WFEntity", waypoints: list[Tuple[float, float]] = None, parent=None):
+    def __init__(self, srcEntity: "WFEntity", dstEntity: "WFEntity", waypoints: list[Tuple[float, float]] = None, srcStatusKey: Optional[str] = None, dstStatusKey: Optional[str] = None, parent=None):
         super().__init__(parent)
         
         self.srcEntity = srcEntity
         self.dstEntity = dstEntity
+        self.srcStatusKey = srcStatusKey  # Status key for source entity line alignment
+        self.dstStatusKey = dstStatusKey  # Status key for destination entity line alignment
         # Convert static waypoints to InteractiveWaypoint objects
         self.interactive_waypoints = self._convert_waypoints_to_interactive(waypoints or [])
         self.headSize = 8
@@ -495,26 +592,26 @@ class MultiSegmentArrow(QObject):
             
             # Get source entity edge point
             if not self.interactive_waypoints:
-                # No waypoints - direct connection like SmartArrow
-                startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+                # No waypoints - direct connection using status-aware calculation
+                startPoint, endPoint = calculateLineEndpointsWithStatus(self.srcEntity, self.dstEntity, self.srcStatusKey, self.dstStatusKey)
                 pathPoints = [startPoint, endPoint]
             else:
                 # Calculate edge intersections to/from waypoints
                 srcCenterX, srcCenterY = self.srcEntity.shape.getCurrentCenter()
                 dstCenterX, dstCenterY = self.dstEntity.shape.getCurrentCenter()
                 
-                # First waypoint determines source edge intersection
+                # First waypoint determines source edge intersection (with status key)
                 first_waypoint = self.interactive_waypoints[0]
-                startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
+                startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y, self.srcStatusKey)
                 pathPoints.append(startPoint)
                 
                 # Add all waypoints
                 for waypoint in self.interactive_waypoints:
                     pathPoints.append(waypoint.position)
                 
-                # Last waypoint determines destination edge intersection  
+                # Last waypoint determines destination edge intersection (with status key)
                 last_waypoint = self.interactive_waypoints[-1]
-                endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
+                endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y, self.dstStatusKey)
                 pathPoints.append(endPoint)
             
             # Update line segments
@@ -535,8 +632,10 @@ class MultiSegmentArrow(QObject):
             from workflow_designer.wfd_logger import logger
             logger.error(f"Error updating multi-segment arrow geometry: {e}")
     
-    def _calculateEntityEdgePoint(self, entity: "WFEntity", targetX: float, targetY: float) -> Tuple[float, float]:
-        """Calculate where a line from entity center to target point intersects the entity edge"""
+    def _calculateEntityEdgePoint(self, entity: "WFEntity", targetX: float, targetY: float, statusKey: Optional[str] = None) -> Tuple[float, float]:
+        """Calculate where a line from entity center to target point intersects the entity edge
+        For workflows, can use status-specific positioning if statusKey is provided.
+        """
         from workflow_designer.wfd_scene import EntityType
         
         centerX, centerY = entity.shape.getCurrentCenter()
@@ -549,9 +648,18 @@ class MultiSegmentArrow(QObject):
             )
         else:  # Rectangle (Workflow)
             left, top, width, height = entity.shape.getCurrentBounds()
-            return findRectangleEdgeIntersection(
+            
+            # Try to get status-specific attachment point
+            statusY = None
+            if statusKey and hasattr(entity, 'getStatusLineAttachmentPoint'):
+                attachment = entity.getStatusLineAttachmentPoint(statusKey)
+                if attachment:
+                    statusY = attachment[1]
+            
+            return findRectangleEdgeIntersectionForStatus(
                 left, top, width, height,
-                centerX, centerY, targetX, targetY
+                centerX, centerY, targetX, targetY,
+                targetY=statusY
             )
     
     def _updateArrowhead(self, startPoint: Tuple[float, float], endPoint: Tuple[float, float]):
@@ -678,25 +786,25 @@ class MultiSegmentArrow(QObject):
     def update_geometry_with_temp_waypoints(self, temp_waypoints: List['InteractiveWaypoint']):
         """Update line geometry with temporary waypoints for preview (without modifying actual waypoints)"""
         if not temp_waypoints:
-            # No waypoints - direct connection like SmartArrow
-            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            # No waypoints - direct connection using status-aware calculation
+            startPoint, endPoint = calculateLineEndpointsWithStatus(self.srcEntity, self.dstEntity, self.srcStatusKey, self.dstStatusKey)
             path_points = [startPoint, endPoint]
         else:
             # Build path with edge intersections using temp waypoints
             path_points = []
             
-            # First waypoint determines source edge intersection
+            # First waypoint determines source edge intersection (with status key)
             first_waypoint = temp_waypoints[0]
-            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
+            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y, self.srcStatusKey)
             path_points.append(startPoint)
             
             # Add all temp waypoints
             for waypoint in temp_waypoints:
                 path_points.append(waypoint.position)
             
-            # Last waypoint determines destination edge intersection  
+            # Last waypoint determines destination edge intersection (with status key)  
             last_waypoint = temp_waypoints[-1]
-            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
+            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y, self.dstStatusKey)
             path_points.append(endPoint)
         
         # Update visual line segments with temp path
@@ -811,25 +919,25 @@ class MultiSegmentArrow(QObject):
     def get_current_path_points(self) -> List[Tuple[float, float]]:
         """Get the current complete path including entity edge points"""
         if not self.interactive_waypoints:
-            # No waypoints - direct connection
-            startPoint, endPoint = calculateLineEndpoints(self.srcEntity, self.dstEntity)
+            # No waypoints - direct connection using status-aware calculation
+            startPoint, endPoint = calculateLineEndpointsWithStatus(self.srcEntity, self.dstEntity, self.srcStatusKey, self.dstStatusKey)
             return [startPoint, endPoint]
         else:
             # Build path with edge intersections
             path_points = []
             
-            # First waypoint determines source edge intersection
+            # First waypoint determines source edge intersection (with status key)
             first_waypoint = self.interactive_waypoints[0]
-            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y)
+            startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y, self.srcStatusKey)
             path_points.append(startPoint)
             
             # Add all waypoints
             for waypoint in self.interactive_waypoints:
                 path_points.append(waypoint.position)
             
-            # Last waypoint determines destination edge intersection  
+            # Last waypoint determines destination edge intersection (with status key)  
             last_waypoint = self.interactive_waypoints[-1]
-            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y)
+            endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y, self.dstStatusKey)
             path_points.append(endPoint)
             
             return path_points
