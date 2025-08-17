@@ -1,0 +1,2388 @@
+"""
+Undo/Redo system for workflow designer using Qt's command pattern.
+
+This module provides a comprehensive undo/redo framework built on Qt's QUndoStack
+and QUndoCommand classes, with full object serialization and restoration support.
+"""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from abc import abstractmethod
+
+from PySide6.QtGui import QUndoStack, QUndoCommand
+from PySide6.QtCore import QObject, Signal, Qt
+
+from .wfd_logger import logger
+
+if TYPE_CHECKING:
+    from .wfd_scene import WFScene, WFEntity, WFWorkflow, WFStatus, WFLineGroup
+    from .wfd_deletion_manager import DeletionResult
+
+
+class UndoableAction(Enum):
+    """Types of undoable operations in the workflow designer"""
+    DELETE = "delete"
+    CREATE = "create"
+    MOVE = "move"
+    EDIT = "edit"
+    CONNECT = "connect"
+
+
+@dataclass
+class TextItemSnapshot:
+    """Detailed snapshot of a QGraphicsTextItem with all calculated state"""
+    text: str
+    position: tuple[float, float]  # (x, y)
+    font_family: str
+    font_size: int
+    font_bold: bool
+    font_italic: bool
+    font_underline: bool
+    font_strikeout: bool
+    text_color: str  # Color name
+    z_value: int
+    bounding_rect: tuple[float, float, float, float]  # (x, y, width, height)
+    parent_relative_pos: tuple[float, float]  # Position relative to parent
+    is_visible: bool
+    is_enabled: bool
+
+
+@dataclass
+class QtGraphicsItemSnapshot:
+    """Complete Qt graphics item state"""
+    position: tuple[float, float]
+    z_value: int
+    transform_matrix: List[float]  # 3x3 matrix flattened
+    bounding_rect: tuple[float, float, float, float]
+    scene_bounding_rect: tuple[float, float, float, float]
+    is_visible: bool
+    is_enabled: bool
+    is_selected: bool
+    opacity: float
+    parent_item: Optional[str] = None  # Reference to parent item if any
+
+
+@dataclass
+class WaypointSnapshot:
+    """Detailed waypoint state for MultiSegmentArrow"""
+    x: float
+    y: float
+    is_user_created: bool
+    is_interactive: bool = True
+    node_visible: bool = False
+    node_id: str = ""  # Preserve original node_id for proper restoration
+    node_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ObjectSnapshot:
+    """
+    Complete snapshot of an object's state for undo/redo functionality.
+    
+    Enhanced to capture all calculated state, Qt graphics hierarchy,
+    and interactive elements for pixel-perfect restoration.
+    """
+    object_type: str  # "WFWorkflow", "WFStatus", "WFLineGroup"
+    entity_key: str
+    properties: Dict[str, Any] = field(default_factory=dict)
+    relationships: Dict[str, List[str]] = field(default_factory=dict)
+    graphics_state: QtGraphicsItemSnapshot = None
+    creation_context: Dict[str, Any] = field(default_factory=dict)
+    
+    # Enhanced state capture
+    text_items: List[TextItemSnapshot] = field(default_factory=list)
+    calculated_properties: Dict[str, Any] = field(default_factory=dict)
+    shape_state: Dict[str, Any] = field(default_factory=dict)
+    waypoints: List[WaypointSnapshot] = field(default_factory=list)
+    interactive_elements: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Initialize default relationship structure"""
+        if not self.relationships:
+            self.relationships = {
+                'source_lines': [],
+                'dest_lines': [],
+                'source_keys': [],
+                'dest_keys': []
+            }
+
+
+class DeepStateSerializer:
+    """
+    Advanced serialization system that captures complete object state.
+    
+    Captures all calculated properties, Qt graphics hierarchy, interactive elements,
+    and derived state for pixel-perfect object restoration.
+    """
+    
+    @staticmethod
+    def serialize_entity(entity: 'WFEntity') -> ObjectSnapshot:
+        """
+        Create a complete deep snapshot of a WFEntity with all calculated state.
+        
+        Args:
+            entity: The entity to serialize
+            
+        Returns:
+            ObjectSnapshot: Complete state capture with pixel-perfect fidelity
+        """
+        from .wfd_scene import WFWorkflow, WFStatus
+        
+        # Determine object type and capture specific properties
+        if isinstance(entity, WFWorkflow):
+            object_type = "WFWorkflow"
+            properties = {
+                'title': entity.title,
+                'statuses': entity.statuses.copy(),
+                'status_objects': entity.statusObjects.copy() if entity.statusObjects else [],
+                'status_positions': entity.status_positions.copy()
+            }
+        else:  # WFStatus
+            object_type = "WFStatus"
+            properties = {
+                'title': entity.title
+            }
+        
+        # Common entity properties
+        properties.update({
+            'entity_type': entity.entityType.value,
+            'rect': {
+                'left': entity.shape.rect.left,
+                'top': entity.shape.rect.top,
+                'width': entity.shape.rect.width,
+                'height': entity.shape.rect.height,
+                'rx': getattr(entity.shape.rect, 'rx', 0),
+                'ry': getattr(entity.shape.rect, 'ry', 0),
+                'cx': getattr(entity.shape.rect, 'cx', 0),
+                'cy': getattr(entity.shape.rect, 'cy', 0)
+            }
+        })
+        
+        # Capture actual brush and pen from graphics item (colors are stored here, not on shape)
+        if entity.shape and entity.shape.graphicsItem:
+            graphics_item = entity.shape.graphicsItem
+            
+            # CRITICAL: Capture original colors, not selection colors!
+            # If object is selected, use stored original colors, otherwise use current colors
+            
+            # Capture brush (fill color) - use original if available
+            if hasattr(entity.shape, '_original_brush') and entity.shape._original_brush:
+                # Object is selected, use the stored original brush
+                brush = entity.shape._original_brush
+                logger.debug(f"Using original brush color for selected entity {entity.entityKey}")
+            elif hasattr(graphics_item, 'brush'):
+                # Object not selected, use current brush
+                brush = graphics_item.brush()
+            else:
+                brush = None
+            
+            if brush and brush.style() != Qt.NoBrush:
+                properties['graphics_brush'] = {
+                    'color': brush.color().name(),
+                    'style': int(brush.style().value)
+                }
+            
+            # Capture pen (stroke color and width) - use original if available  
+            if hasattr(entity.shape, '_original_pen') and entity.shape._original_pen:
+                # Object is selected, use the stored original pen
+                pen = entity.shape._original_pen
+                logger.debug(f"Using original pen color for selected entity {entity.entityKey}")
+            elif hasattr(graphics_item, 'pen'):
+                # Object not selected, use current pen
+                pen = graphics_item.pen()
+            else:
+                pen = None
+            
+            if pen:
+                properties['graphics_pen'] = {
+                    'color': pen.color().name(),
+                    'width': pen.width(),
+                    'style': int(pen.style().value)
+                }
+        
+        # Capture relationships
+        relationships = {
+            'source_lines': [line.srcEntity.entityKey + "->" + line.dstEntity.entityKey for line in entity.sourceLines],
+            'dest_lines': [line.srcEntity.entityKey + "->" + line.dstEntity.entityKey for line in entity.destLines],
+            'source_keys': entity.sourceKeys.copy(),
+            'dest_keys': entity.destKeys.copy()
+        }
+        
+        # Capture complete Qt graphics state
+        graphics_state = None
+        if entity.shape and entity.shape.graphicsItem:
+            graphics_item = entity.shape.graphicsItem
+            transform = graphics_item.transform()
+            
+            graphics_state = QtGraphicsItemSnapshot(
+                position=(graphics_item.pos().x(), graphics_item.pos().y()),
+                z_value=graphics_item.zValue(),
+                transform_matrix=[
+                    transform.m11(), transform.m12(), transform.m13(),
+                    transform.m21(), transform.m22(), transform.m23(),
+                    transform.m31(), transform.m32(), transform.m33()
+                ],
+                bounding_rect=(
+                    graphics_item.boundingRect().x(),
+                    graphics_item.boundingRect().y(),
+                    graphics_item.boundingRect().width(),
+                    graphics_item.boundingRect().height()
+                ),
+                scene_bounding_rect=(
+                    graphics_item.sceneBoundingRect().x(),
+                    graphics_item.sceneBoundingRect().y(),
+                    graphics_item.sceneBoundingRect().width(),
+                    graphics_item.sceneBoundingRect().height()
+                ),
+                is_visible=graphics_item.isVisible(),
+                is_enabled=graphics_item.isEnabled(),
+                is_selected=graphics_item.isSelected(),
+                opacity=graphics_item.opacity()
+            )
+        
+        # Capture all text items with complete state
+        text_items = []
+        for text_item in entity.textItems:
+            if text_item:
+                font = text_item.font()
+                color = text_item.defaultTextColor()
+                
+                text_snapshot = TextItemSnapshot(
+                    text=text_item.toPlainText(),
+                    position=(text_item.pos().x(), text_item.pos().y()),
+                    font_family=font.family(),
+                    font_size=font.pointSize(),
+                    font_bold=font.bold(),
+                    font_italic=font.italic(),
+                    font_underline=font.underline(),
+                    font_strikeout=font.strikeOut(),
+                    text_color=color.name(),
+                    z_value=text_item.zValue(),
+                    bounding_rect=(
+                        text_item.boundingRect().x(),
+                        text_item.boundingRect().y(),
+                        text_item.boundingRect().width(),
+                        text_item.boundingRect().height()
+                    ),
+                    parent_relative_pos=(
+                        text_item.pos().x() - entity.shape.graphicsItem.pos().x() if entity.shape.graphicsItem else text_item.pos().x(),
+                        text_item.pos().y() - entity.shape.graphicsItem.pos().y() if entity.shape.graphicsItem else text_item.pos().y()
+                    ),
+                    is_visible=text_item.isVisible(),
+                    is_enabled=text_item.isEnabled()
+                )
+                text_items.append(text_snapshot)
+        
+        # Capture calculated shape state including exact geometry
+        shape_state = {}
+        if entity.shape:
+            shape_state = {
+                'actual_bounds': {
+                    'x': entity.shape.graphicsItem.boundingRect().x() if entity.shape.graphicsItem else 0,
+                    'y': entity.shape.graphicsItem.boundingRect().y() if entity.shape.graphicsItem else 0,
+                    'width': entity.shape.graphicsItem.boundingRect().width() if entity.shape.graphicsItem else 0,
+                    'height': entity.shape.graphicsItem.boundingRect().height() if entity.shape.graphicsItem else 0
+                },
+                'scene_bounds': entity.shape.getCurrentBounds() if hasattr(entity.shape, 'getCurrentBounds') else None,
+                'shape_type': type(entity.shape).__name__,
+                # For ellipses, capture the actual QGraphicsEllipseItem rect
+                'graphics_geometry': None
+            }
+            
+            # Capture Qt graphics geometry for precise restoration
+            if entity.shape.graphicsItem:
+                if hasattr(entity.shape.graphicsItem, 'rect'):
+                    # For QGraphicsEllipseItem or QGraphicsRectItem
+                    qt_rect = entity.shape.graphicsItem.rect()
+                    shape_state['graphics_geometry'] = {
+                        'rect_x': qt_rect.x(),
+                        'rect_y': qt_rect.y(), 
+                        'rect_width': qt_rect.width(),
+                        'rect_height': qt_rect.height()
+                    }
+                    
+                # Also capture the position
+                pos = entity.shape.graphicsItem.pos()
+                shape_state['graphics_position'] = {
+                    'x': pos.x(),
+                    'y': pos.y()
+                }
+        
+        # Capture calculated properties specific to each type
+        calculated_properties = {}
+        if isinstance(entity, WFWorkflow):
+            # Capture text layout calculations
+            title_pos = (entity.textItems[0].pos().x(), entity.textItems[0].pos().y()) if entity.textItems else (0, 0)
+            status_positions = [(item.pos().x(), item.pos().y()) for item in entity.textItems[1:]] if len(entity.textItems) > 1 else []
+            
+            calculated_properties['text_layout'] = {
+                'title_position': title_pos,
+                'status_item_positions': status_positions
+            }
+        
+        return ObjectSnapshot(
+            object_type=object_type,
+            entity_key=entity.entityKey,
+            properties=properties,
+            relationships=relationships,
+            graphics_state=graphics_state,
+            text_items=text_items,
+            calculated_properties=calculated_properties,
+            shape_state=shape_state
+        )
+    
+    @staticmethod
+    def serialize_line(line: 'WFLineGroup') -> ObjectSnapshot:
+        """
+        Create a complete deep snapshot of a WFLineGroup with all interactive state.
+        
+        Args:
+            line: The line group to serialize
+            
+        Returns:
+            ObjectSnapshot: Complete state capture including all waypoints and interactive elements
+        """
+        properties = {
+            'src_entity_key': line.srcEntity.entityKey,
+            'dst_entity_key': line.dstEntity.entityKey,
+            'src_status_key': line.srcStatusKey,
+            'dst_status_key': line.dstStatusKey,
+            'arrow_type': type(line.arrow).__name__
+        }
+        
+        # Capture complete waypoint state
+        waypoints = []
+        if hasattr(line.arrow, 'interactive_waypoints'):
+            for wp in line.arrow.interactive_waypoints:
+                waypoint_snapshot = WaypointSnapshot(
+                    x=wp.x,
+                    y=wp.y,
+                    is_user_created=wp.is_user_created,
+                    is_interactive=getattr(wp, 'is_interactive', True),
+                    node_visible=getattr(wp, 'node_visible', False),
+                    node_id=getattr(wp, 'node_id', ''),  # Capture original node_id
+                    node_properties={
+                        'z_value': getattr(wp, 'z_value', 1),
+                        'size': getattr(wp, 'size', 6),
+                        'color': getattr(wp, 'color', 'blue')
+                    }
+                )
+                waypoints.append(waypoint_snapshot)
+        
+        # Capture link data if available
+        if line.linkData:
+            properties['link_data'] = {
+                'link_attribs': line.linkData.linkAttribs.copy() if line.linkData.linkAttribs else {},
+            }
+        
+        # Capture all graphics items in the line
+        graphics_items_state = []
+        for item in line.lineSegments:
+            if hasattr(item, 'graphicsItem') and item.graphicsItem:
+                graphics_item = item.graphicsItem
+                item_state = {
+                    'type': type(item).__name__,
+                    'position': (graphics_item.pos().x(), graphics_item.pos().y()),
+                    'z_value': graphics_item.zValue(),
+                    'is_visible': graphics_item.isVisible(),
+                    'is_enabled': graphics_item.isEnabled(),
+                    'bounding_rect': (
+                        graphics_item.boundingRect().x(),
+                        graphics_item.boundingRect().y(),
+                        graphics_item.boundingRect().width(),
+                        graphics_item.boundingRect().height()
+                    )
+                }
+                # Capture line-specific properties
+                if hasattr(graphics_item, 'pen'):
+                    pen = graphics_item.pen()
+                    item_state['pen_properties'] = {
+                        'color': pen.color().name(),
+                        'width': pen.width(),
+                        'style': pen.style()
+                    }
+                graphics_items_state.append(item_state)
+        
+        # Capture arrow-specific state
+        arrow_state = {
+            'start_point': (line.arrow.start_point.x(), line.arrow.start_point.y()) if hasattr(line.arrow, 'start_point') else None,
+            'end_point': (line.arrow.end_point.x(), line.arrow.end_point.y()) if hasattr(line.arrow, 'end_point') else None,
+            'segments_count': len(line.lineSegments),
+            'node_manager_active': hasattr(line.arrow, 'node_manager') and line.arrow.node_manager is not None
+        }
+        
+        # Capture interactive elements state
+        interactive_elements = {
+            'graphics_items': graphics_items_state,
+            'arrow_state': arrow_state,
+            'selection_state': {
+                'is_selected': getattr(line.arrow, '_selected', False),
+                'selection_color': getattr(line.arrow, '_selection_color', None)
+            }
+        }
+        
+        return ObjectSnapshot(
+            object_type="WFLineGroup",
+            entity_key=f"{line.srcEntity.entityKey}->{line.dstEntity.entityKey}",
+            properties=properties,
+            relationships={},  # Lines don't have child relationships
+            waypoints=waypoints,
+            interactive_elements=interactive_elements
+        )
+    
+    @staticmethod
+    def deserialize_entity(snapshot: ObjectSnapshot, scene: 'WFScene') -> 'WFEntity':
+        """
+        Recreate an entity from a snapshot using the RestorationEngine.
+        
+        Creates a minimal entity object and then applies the complete captured
+        state using RestorationEngine for pixel-perfect restoration.
+        
+        Args:
+            snapshot: The object snapshot to restore from
+            scene: The scene to restore the entity to
+            
+        Returns:
+            WFEntity: The perfectly restored entity
+        """
+        # Import here to avoid circular imports
+        from .wfd_scene import WFWorkflow, WFStatus
+        from .wfd_objects import Rect
+        from PySide6.QtGui import QColor
+        
+        # Validate properties is a dictionary
+        if not isinstance(snapshot.properties, dict):
+            import traceback
+            logger.error(f"Invalid snapshot properties type: {type(snapshot.properties)}. Expected dict.")
+            logger.error(f"Snapshot details: entity_key={snapshot.entity_key}, object_type={snapshot.object_type}")
+            logger.error(f"Full stack trace:\n{traceback.format_exc()}")
+            raise ValueError(f"Cannot deserialize entity: properties is {type(snapshot.properties)}, not dict")
+        
+        # Create minimal rect for initial construction
+        rect_data = snapshot.properties['rect']
+        if snapshot.object_type == "WFWorkflow":
+            rect = Rect(rect_data['left'], rect_data['top'], rect_data['width'], rect_data['height'])
+        else:  # WFStatus - convert ellipse parameters (cx, cy, rx, ry) to rect parameters (left, top, width, height)
+            # For ellipses: left = cx - rx, top = cy - ry, width = 2*rx, height = 2*ry
+            left = rect_data['cx'] - rect_data['rx']
+            top = rect_data['cy'] - rect_data['ry'] 
+            width = 2 * rect_data['rx']  # diameter = 2 * radius
+            height = 2 * rect_data['ry']  # diameter = 2 * radius
+            rect = Rect(left, top, width, height)
+            
+            logger.debug(f"Ellipse parameter conversion for {snapshot.entity_key}:")
+            logger.debug(f"  Original: cx={rect_data['cx']}, cy={rect_data['cy']}, rx={rect_data['rx']}, ry={rect_data['ry']}")
+            logger.debug(f"  Converted: left={left}, top={top}, width={width}, height={height}")
+            logger.debug(f"  Verification: rect.rx={rect.rx}, rect.ry={rect.ry}, rect.cx={rect.cx}, rect.cy={rect.cy}")
+        
+        # Note: Colors will be restored directly to graphics item after creation
+        # Don't pass colors to constructor as they may get overridden
+        fill_color = None
+        draw_color = None
+        
+        # Create basic entity using minimal constructor parameters
+        if snapshot.object_type == "WFWorkflow":
+            entity = WFWorkflow(
+                entityKey=snapshot.entity_key,
+                title=snapshot.properties['title'],
+                statuses=snapshot.properties.get('statuses', []),
+                rect=rect,
+                statusObjects=snapshot.properties.get('status_objects', []),
+                fillColor=fill_color,
+                drawColor=draw_color
+            )
+        else:  # WFStatus
+            entity = WFStatus(
+                entityKey=snapshot.entity_key,
+                title=snapshot.properties['title'],
+                rect=rect,
+                fillColor=fill_color,
+                drawColor=draw_color
+            )
+        
+        # Now apply the complete captured state using RestorationEngine
+        logger.debug(f"About to call RestorationEngine.restore_entity_state for entity {snapshot.entity_key}")
+        restore_result = RestorationEngine.restore_entity_state(entity, snapshot)
+        logger.debug(f"RestorationEngine.restore_entity_state returned: {restore_result}")
+        if not restore_result:
+            logger.warning(f"Failed to fully restore entity state for {snapshot.entity_key}")
+        
+        return entity
+    
+    @staticmethod
+    def deserialize_line(snapshot: ObjectSnapshot, scene: 'WFScene') -> 'WFLineGroup':
+        """
+        Recreate a line group from a snapshot using the RestorationEngine.
+        
+        Creates a basic line group and then applies the complete captured
+        state using RestorationEngine for pixel-perfect restoration.
+        
+        Args:
+            snapshot: The object snapshot to restore from
+            scene: The scene to restore the line to
+            
+        Returns:
+            WFLineGroup: The perfectly restored line group
+        """
+        from .wfd_scene import WFLineGroup
+        
+        # Validate properties is a dictionary
+        if not isinstance(snapshot.properties, dict):
+            import traceback
+            logger.error(f"Invalid line snapshot properties type: {type(snapshot.properties)}. Expected dict.")
+            logger.error(f"Line snapshot details available attributes: {dir(snapshot)}")
+            logger.error(f"Full stack trace:\n{traceback.format_exc()}")
+            raise ValueError(f"Cannot deserialize line: properties is {type(snapshot.properties)}, not dict")
+        
+        # Find source and destination entities
+        src_key = snapshot.properties['src_entity_key']
+        dst_key = snapshot.properties['dst_entity_key']
+        
+        src_entity = scene.getEntityByKey(src_key)
+        dst_entity = scene.getEntityByKey(dst_key)
+        
+        if not src_entity or not dst_entity:
+            raise ValueError(f"Cannot restore line: missing entities {src_key} -> {dst_key}")
+        
+        # Restore link data if available
+        link_data = None
+        if 'link_data' in snapshot.properties:
+            # Create a mock link object with the captured attributes
+            from .wfd_objects import Link
+            link_data = type('MockLink', (), {
+                'linkAttribs': snapshot.properties['link_data'].get('link_attribs', {})
+            })()
+        
+        # Create basic line group (this will automatically register with entities)
+        line = WFLineGroup(src_entity, dst_entity, link_data)
+        
+        # Apply the complete captured state using RestorationEngine
+        if not RestorationEngine.restore_line_state(line, snapshot):
+            logger.warning(f"Failed to fully restore line state for {snapshot.entity_key}")
+        
+        return line
+
+
+# Compatibility alias for existing code
+ObjectSerializer = DeepStateSerializer
+
+
+class RestorationEngine:
+    """
+    Smart restoration system that applies captured state directly to objects.
+    
+    Bypasses constructors and recalculations to restore objects to exact 
+    previous state with pixel-perfect fidelity.
+    """
+    
+    @staticmethod
+    def restore_entity_state(entity: 'WFEntity', snapshot: ObjectSnapshot) -> bool:
+        """
+        Apply complete captured state directly to an entity object.
+        
+        Args:
+            entity: The entity object to restore state to
+            snapshot: Complete state snapshot to apply
+            
+        Returns:
+            bool: True if restoration successful
+        """
+        logger.debug(f"RestorationEngine.restore_entity_state called for entity {snapshot.entity_key}")
+        try:
+            # Restore basic properties directly
+            entity.entityKey = snapshot.entity_key
+            if isinstance(snapshot.properties, dict) and 'title' in snapshot.properties:
+                entity.title = snapshot.properties['title']
+            
+            # Restore relationships
+            entity.sourceKeys = snapshot.relationships.get('source_keys', [])
+            entity.destKeys = snapshot.relationships.get('dest_keys', [])
+            
+            # Restore shape-specific state FIRST (this sets the correct geometry)
+            logger.debug(f"Entity restoration: shape_state exists = {snapshot.shape_state is not None}, entity.shape exists = {entity.shape is not None}")
+            if hasattr(snapshot, 'shape_state'):
+                logger.debug(f"Shape state contents: {snapshot.shape_state}")
+            
+            if snapshot.shape_state and entity.shape:
+                logger.debug(f"Calling _restore_shape_state for entity {entity.entityKey}")
+                RestorationEngine._restore_shape_state(entity.shape, snapshot.shape_state)
+            else:
+                logger.debug(f"Skipping shape state restoration: shape_state={snapshot.shape_state}, entity.shape={entity.shape}")
+            
+            # Restore Qt graphics state if available
+            if snapshot.graphics_state is not None and entity.shape and entity.shape.graphicsItem:
+                RestorationEngine._restore_graphics_item_state(
+                    entity.shape.graphicsItem, 
+                    snapshot.graphics_state
+                )
+            
+            # Restore text items state AFTER shape geometry is correct
+            RestorationEngine._restore_text_items_state(entity, snapshot.text_items)
+            
+            # Restore calculated properties
+            if snapshot.calculated_properties and hasattr(entity, 'status_positions'):
+                if isinstance(snapshot.properties, dict) and 'status_positions' in snapshot.properties:
+                    entity.status_positions = snapshot.properties['status_positions'].copy()
+            
+            # CRITICAL: Restore brush and pen (colors) to graphics item
+            RestorationEngine._restore_graphics_colors(entity, snapshot.properties)
+            
+            logger.debug(f"Successfully restored entity state: {entity.entityKey}")
+            return True
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"Error restoring entity state for {snapshot.entity_key}: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            logger.error(f"Snapshot properties type: {type(snapshot.properties)}")
+            return False
+    
+    @staticmethod
+    def restore_line_state(line: 'WFLineGroup', snapshot: ObjectSnapshot) -> bool:
+        """
+        Apply complete captured state directly to a line group object.
+        
+        Args:
+            line: The line group object to restore state to
+            snapshot: Complete state snapshot to apply
+            
+        Returns:
+            bool: True if restoration successful
+        """
+        try:
+            # Restore basic properties
+            line.srcStatusKey = snapshot.properties.get('src_status_key')
+            line.dstStatusKey = snapshot.properties.get('dst_status_key')
+            
+            # Restore waypoints to arrow
+            if snapshot.waypoints and hasattr(line.arrow, 'interactive_waypoints'):
+                RestorationEngine._restore_waypoints_state(line.arrow, snapshot.waypoints)
+            
+            # Restore graphics items state
+            if snapshot.interactive_elements and 'graphics_items' in snapshot.interactive_elements:
+                RestorationEngine._restore_line_graphics_state(
+                    line, 
+                    snapshot.interactive_elements['graphics_items']
+                )
+            
+            # Restore selection state
+            if snapshot.interactive_elements and 'selection_state' in snapshot.interactive_elements:
+                selection_state = snapshot.interactive_elements['selection_state']
+                if selection_state.get('is_selected', False):
+                    color_name = selection_state.get('selection_color')
+                    if color_name:
+                        from PySide6.QtGui import QColor
+                        line.setSelected(True, QColor(color_name))
+            
+            logger.debug(f"Successfully restored line state: {snapshot.entity_key}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error restoring line state for {snapshot.entity_key}: {e}")
+            return False
+    
+    @staticmethod
+    def _restore_graphics_item_state(graphics_item, graphics_snapshot: QtGraphicsItemSnapshot):
+        """Restore complete Qt graphics item state"""
+        try:
+            # Restore position
+            graphics_item.setPos(graphics_snapshot.position[0], graphics_snapshot.position[1])
+            
+            # Restore z-value
+            graphics_item.setZValue(graphics_snapshot.z_value)
+            
+            # Restore transform
+            from PySide6.QtGui import QTransform
+            matrix = graphics_snapshot.transform_matrix
+            transform = QTransform(
+                matrix[0], matrix[1], matrix[2],
+                matrix[3], matrix[4], matrix[5],
+                matrix[6], matrix[7], matrix[8]
+            )
+            graphics_item.setTransform(transform)
+            
+            # Restore visibility and enabled state
+            graphics_item.setVisible(graphics_snapshot.is_visible)
+            graphics_item.setEnabled(graphics_snapshot.is_enabled)
+            graphics_item.setOpacity(graphics_snapshot.opacity)
+            
+            # Restore selection state
+            graphics_item.setSelected(graphics_snapshot.is_selected)
+            
+        except Exception as e:
+            logger.error(f"Error restoring graphics item state: {e}")
+    
+    @staticmethod
+    def _restore_text_items_state(entity: 'WFEntity', text_snapshots: List[TextItemSnapshot]):
+        """Restore all text items to their exact previous state"""
+        try:
+            # For status entities, we need to completely replace the text that was created by constructor
+            # Clear all existing text items first
+            for text_item in entity.textItems:
+                if text_item and text_item.scene():
+                    text_item.scene().removeItem(text_item)
+                elif text_item and text_item.parentItem():
+                    # Remove from parent if not in scene yet
+                    text_item.setParentItem(None)
+            entity.textItems.clear()
+            
+            # Recreate text items from snapshots with exact positioning
+            for text_snapshot in text_snapshots:
+                from PySide6.QtWidgets import QGraphicsTextItem
+                from PySide6.QtGui import QFont, QColor
+                from PySide6.QtCore import Qt
+                
+                # Create text item with exact parent relationship
+                text_item = QGraphicsTextItem(text_snapshot.text, parent=entity.shape.graphicsItem)
+                
+                # Restore font exactly as captured
+                font = QFont(text_snapshot.font_family, text_snapshot.font_size)
+                font.setBold(text_snapshot.font_bold)
+                font.setItalic(text_snapshot.font_italic)
+                font.setUnderline(text_snapshot.font_underline)
+                font.setStrikeOut(text_snapshot.font_strikeout)
+                text_item.setFont(font)
+                
+                # Restore text color exactly
+                text_item.setDefaultTextColor(QColor(text_snapshot.text_color))
+                
+                # CRITICAL: Apply the exact captured position - no recalculation!
+                text_item.setPos(text_snapshot.position[0], text_snapshot.position[1])
+                
+                # Restore z-value exactly
+                text_item.setZValue(text_snapshot.z_value)
+                
+                # Restore visibility and enabled state
+                text_item.setVisible(text_snapshot.is_visible)
+                text_item.setEnabled(text_snapshot.is_enabled)
+                
+                entity.textItems.append(text_item)
+                
+                logger.debug(f"Restored text item '{text_snapshot.text}' at exact position ({text_snapshot.position[0]:.1f}, {text_snapshot.position[1]:.1f})")
+                
+        except Exception as e:
+            logger.error(f"Error restoring text items state: {e}")
+    
+    @staticmethod
+    def _restore_waypoints_state(arrow, waypoint_snapshots: List[WaypointSnapshot]):
+        """Restore all waypoints to their exact previous state"""
+        try:
+            # Clear existing waypoints
+            if hasattr(arrow, 'interactive_waypoints'):
+                arrow.interactive_waypoints.clear()
+            
+            # Recreate waypoints from snapshots
+            from workflow_designer.wfd_interactive_nodes import InteractiveWaypoint
+            
+            for waypoint_snapshot in waypoint_snapshots:
+                # Create proper InteractiveWaypoint instances (not fake objects)
+                waypoint = InteractiveWaypoint(
+                    position=(waypoint_snapshot.x, waypoint_snapshot.y),
+                    is_user_created=waypoint_snapshot.is_user_created,
+                    node_id=waypoint_snapshot.node_id if waypoint_snapshot.node_id else ""
+                    # If node_id is empty, __post_init__ will generate a new one
+                )
+                
+                if hasattr(arrow, 'interactive_waypoints'):
+                    arrow.interactive_waypoints.append(waypoint)
+            
+            # Trigger arrow reconstruction with restored waypoints
+            if hasattr(arrow, 'reconstruct_with_waypoints'):
+                arrow.reconstruct_with_waypoints()
+            elif hasattr(arrow, 'updateGeometry'):
+                arrow.updateGeometry()
+                
+        except Exception as e:
+            logger.error(f"Error restoring waypoints state: {e}")
+    
+    @staticmethod
+    def _restore_line_graphics_state(line: 'WFLineGroup', graphics_items_state: List[Dict]):
+        """Restore all line graphics items to their exact previous state"""
+        try:
+            # This will need to be implemented based on the specific graphics items structure
+            # For now, trigger a rebuild of the line graphics
+            if hasattr(line.arrow, 'rebuild_graphics'):
+                line.arrow.rebuild_graphics()
+            elif hasattr(line.arrow, 'updateGeometry'):
+                line.arrow.updateGeometry()
+                
+        except Exception as e:
+            logger.error(f"Error restoring line graphics state: {e}")
+    
+    @staticmethod
+    def _restore_shape_state(shape, shape_snapshot: Dict):
+        """Restore shape-specific state including exact Qt geometry"""
+        try:
+            if not shape or not shape.graphicsItem:
+                logger.debug(f"_restore_shape_state: No shape or graphics item")
+                return
+            
+            logger.debug(f"_restore_shape_state: Available snapshot keys: {list(shape_snapshot.keys())}")
+            logger.debug(f"_restore_shape_state: Graphics item type: {type(shape.graphicsItem)}")
+            logger.debug(f"_restore_shape_state: Current graphics rect: {shape.graphicsItem.rect() if hasattr(shape.graphicsItem, 'rect') else 'No rect method'}")
+            
+            # Restore Qt graphics geometry with coordinate system handling
+            if hasattr(shape.graphicsItem, 'setRect') and hasattr(shape, 'rect'):
+                from PySide6.QtCore import QRectF
+                
+                # Always use the entity's shape.rect dimensions for consistency
+                # This ensures the graphics item matches the entity's logical dimensions
+                correct_rect = QRectF(0, 0, shape.rect.width, shape.rect.height)
+                logger.debug(f"_restore_shape_state: Setting rect to match entity dimensions: {correct_rect}")
+                logger.debug(f"_restore_shape_state: Entity rect - width: {shape.rect.width}, height: {shape.rect.height}")
+                if hasattr(shape.rect, 'rx'):
+                    logger.debug(f"_restore_shape_state: Entity ellipse - rx: {shape.rect.rx}, ry: {shape.rect.ry}")
+                
+                shape.graphicsItem.setRect(correct_rect)
+                logger.debug(f"_restore_shape_state: After setRect, graphics rect: {shape.graphicsItem.rect()}")
+                
+                # Log captured geometry for comparison (debugging only)
+                if 'graphics_geometry' in shape_snapshot and shape_snapshot['graphics_geometry']:
+                    captured_geom = shape_snapshot['graphics_geometry']
+                    logger.debug(f"_restore_shape_state: Note - captured geometry was: {captured_geom} (not used to avoid coordinate system mismatch)")
+            else:
+                logger.debug(f"_restore_shape_state: Graphics item has no setRect method or no shape.rect")
+            
+            # Restore exact position
+            if 'graphics_position' in shape_snapshot:
+                pos = shape_snapshot['graphics_position']
+                shape.graphicsItem.setPos(pos['x'], pos['y'])
+                logger.debug(f"Restored exact shape position: ({pos['x']}, {pos['y']})")
+                
+        except Exception as e:
+            logger.error(f"Error restoring shape state: {e}")
+    
+    @staticmethod
+    def _restore_graphics_colors(entity: 'WFEntity', properties):
+        """Restore brush and pen colors directly to the graphics item"""
+        try:
+            if not entity.shape or not entity.shape.graphicsItem:
+                return
+            
+            # Validate that properties is a dictionary
+            if not isinstance(properties, dict):
+                logger.warning(f"Invalid properties type for color restoration: {type(properties)}. Expected dict.")
+                return
+            
+            graphics_item = entity.shape.graphicsItem
+            
+            # Restore brush (fill color)
+            if 'graphics_brush' in properties:
+                brush_data = properties['graphics_brush']
+                from PySide6.QtGui import QBrush, QColor
+                from PySide6.QtCore import Qt
+                
+                color = QColor(brush_data['color'])
+                brush_style_int = brush_data['style']
+                
+                # Convert integer back to Qt BrushStyle enum
+                brush_style = Qt.BrushStyle(brush_style_int)
+                brush = QBrush(color, brush_style)
+                
+                if hasattr(graphics_item, 'setBrush'):
+                    graphics_item.setBrush(brush)
+                    logger.debug(f"Restored brush color: {brush_data['color']}, style: {brush_style_int}")
+            
+            # Restore pen (stroke color and width)
+            if 'graphics_pen' in properties:
+                pen_data = properties['graphics_pen']
+                from PySide6.QtGui import QPen, QColor
+                from PySide6.QtCore import Qt
+                
+                color = QColor(pen_data['color'])
+                width = pen_data['width']
+                pen_style_int = pen_data['style']
+                
+                # Convert integer back to Qt PenStyle enum
+                pen_style = Qt.PenStyle(pen_style_int)
+                pen = QPen(color, width, pen_style)
+                
+                if hasattr(graphics_item, 'setPen'):
+                    graphics_item.setPen(pen)
+                    logger.debug(f"Restored pen color: {pen_data['color']}, width: {width}, style: {pen_style_int}")
+            
+        except Exception as e:
+            logger.error(f"Error restoring graphics colors: {e}")
+    
+    @staticmethod
+    def _update_all_line_connections(scene: 'WFScene'):
+        """Update all line arrow connections to use correct entity positions"""
+        try:
+            logger.debug(f"COORDINATE DEBUG - Updating all line connections for {len(scene.lines)} lines")
+            updated_count = 0
+            
+            for i, line in enumerate(scene.lines):
+                # DEBUG: Log entity positions before update
+                src_center = line.srcEntity.shape.getCurrentCenter()
+                dst_center = line.dstEntity.shape.getCurrentCenter()
+                src_bounds = line.srcEntity.shape.getCurrentBounds()
+                dst_bounds = line.dstEntity.shape.getCurrentBounds()
+                
+                logger.debug(f"  Line {i} ({line.srcEntity.entityKey}->{line.dstEntity.entityKey}):")
+                logger.debug(f"    Source: center={src_center}, bounds={src_bounds}")
+                logger.debug(f"    Dest: center={dst_center}, bounds={dst_bounds}")
+                
+                # Log path before update
+                if hasattr(line.arrow, 'get_current_path_points'):
+                    path_before = line.arrow.get_current_path_points()
+                    logger.debug(f"    Path before update: {path_before}")
+                
+                # Update geometry
+                if hasattr(line.arrow, 'updateGeometry'):
+                    line.arrow.updateGeometry()
+                    updated_count += 1
+                    
+                    # Log path after update
+                    if hasattr(line.arrow, 'get_current_path_points'):
+                        path_after = line.arrow.get_current_path_points()
+                        logger.debug(f"    Path after update: {path_after}")
+                        
+                elif hasattr(line.arrow, 'reconstruct'):
+                    line.arrow.reconstruct()
+                    updated_count += 1
+                elif hasattr(line.arrow, 'update'):
+                    line.arrow.update()
+                    updated_count += 1
+            
+            logger.debug(f"Updated {updated_count} line connections after entity restoration")
+            
+        except Exception as e:
+            logger.error(f"Error updating line connections: {e}")
+
+
+@dataclass
+class PositionDelta:
+    """Records a position change for movement tracking"""
+    object_id: str  # Unique identifier for the object
+    old_position: tuple[float, float]
+    new_position: tuple[float, float]
+    delta_x: float
+    delta_y: float
+    timestamp: float
+    
+    def __post_init__(self):
+        if self.delta_x is None:
+            self.delta_x = self.new_position[0] - self.old_position[0]
+        if self.delta_y is None:
+            self.delta_y = self.new_position[1] - self.old_position[1]
+
+
+class MovementTracker:
+    """
+    Tracks position changes for objects to enable movement undo/redo.
+    
+    Monitors object movements and maintains delta information for
+    creating undoable movement commands.
+    """
+    
+    def __init__(self, scene: 'WFScene'):
+        self.scene = scene
+        self.tracked_objects: Dict[str, Dict[str, Any]] = {}
+        self.movement_deltas: List[PositionDelta] = []
+        self._tracking_enabled = True
+    
+    def enable_tracking(self, enabled: bool = True):
+        """Enable or disable movement tracking"""
+        self._tracking_enabled = enabled
+        logger.debug(f"Movement tracking {'enabled' if enabled else 'disabled'}")
+    
+    def start_tracking_object(self, obj: Any, object_id: str = None) -> str:
+        """
+        Begin tracking movements for an object.
+        
+        Args:
+            obj: The object to track (entity or line)
+            object_id: Optional custom ID, auto-generated if not provided
+            
+        Returns:
+            str: The tracking ID for the object
+        """
+        if not self._tracking_enabled:
+            return None
+            
+        if object_id is None:
+            if hasattr(obj, 'entityKey'):
+                object_id = obj.entityKey
+            elif hasattr(obj, 'srcEntity') and hasattr(obj, 'dstEntity'):
+                object_id = f"{obj.srcEntity.entityKey}->{obj.dstEntity.entityKey}"
+            else:
+                object_id = f"obj_{id(obj)}"
+        
+        # Get current position
+        current_pos = self._get_object_position(obj)
+        if current_pos is None:
+            logger.warning(f"Could not get position for object {object_id}")
+            return None
+        
+        self.tracked_objects[object_id] = {
+            'object': obj,
+            'initial_position': current_pos,
+            'last_known_position': current_pos,
+            'object_type': type(obj).__name__
+        }
+        
+        logger.debug(f"Started tracking object: {object_id} at position {current_pos}")
+        return object_id
+    
+    def update_object_position(self, object_id: str) -> bool:
+        """
+        Update the tracked position for an object and record delta if moved.
+        
+        Args:
+            object_id: The tracking ID of the object
+            
+        Returns:
+            bool: True if position changed and delta was recorded
+        """
+        if not self._tracking_enabled or object_id not in self.tracked_objects:
+            return False
+        
+        obj_info = self.tracked_objects[object_id]
+        obj = obj_info['object']
+        
+        current_pos = self._get_object_position(obj)
+        if current_pos is None:
+            return False
+        
+        last_pos = obj_info['last_known_position']
+        
+        # Check if position actually changed
+        if abs(current_pos[0] - last_pos[0]) < 0.1 and abs(current_pos[1] - last_pos[1]) < 0.1:
+            return False  # No significant movement
+        
+        # Record the delta
+        import time
+        delta = PositionDelta(
+            object_id=object_id,
+            old_position=last_pos,
+            new_position=current_pos,
+            delta_x=current_pos[0] - last_pos[0],
+            delta_y=current_pos[1] - last_pos[1],
+            timestamp=time.time()
+        )
+        
+        self.movement_deltas.append(delta)
+        obj_info['last_known_position'] = current_pos
+        
+        logger.debug(f"Recorded movement delta for {object_id}: ({delta.delta_x:.1f}, {delta.delta_y:.1f})")
+        return True
+    
+    def stop_tracking_object(self, object_id: str):
+        """Stop tracking an object"""
+        if object_id in self.tracked_objects:
+            del self.tracked_objects[object_id]
+            logger.debug(f"Stopped tracking object: {object_id}")
+    
+    def get_accumulated_delta(self, object_id: str, since_timestamp: float = None) -> Optional[tuple[float, float]]:
+        """
+        Get the accumulated movement delta for an object.
+        
+        Args:
+            object_id: The tracking ID of the object
+            since_timestamp: Only include deltas after this timestamp
+            
+        Returns:
+            tuple[float, float]: Total (delta_x, delta_y) or None
+        """
+        relevant_deltas = [
+            d for d in self.movement_deltas 
+            if d.object_id == object_id and (since_timestamp is None or d.timestamp > since_timestamp)
+        ]
+        
+        if not relevant_deltas:
+            return None
+        
+        total_x = sum(d.delta_x for d in relevant_deltas)
+        total_y = sum(d.delta_y for d in relevant_deltas)
+        
+        return (total_x, total_y)
+    
+    def create_move_command_from_deltas(self, object_ids: List[str], since_timestamp: float = None) -> 'MoveCommand':
+        """
+        Create a MoveCommand from accumulated movement deltas.
+        
+        Args:
+            object_ids: List of object IDs to include in the command
+            since_timestamp: Only include movements after this timestamp
+            
+        Returns:
+            MoveCommand: Command representing the accumulated movements
+        """
+        from .wfd_undo_system import MoveCommand  # Will be defined below
+        
+        # Get objects and their deltas
+        objects_to_move = []
+        total_delta_x = 0
+        total_delta_y = 0
+        
+        for object_id in object_ids:
+            if object_id in self.tracked_objects:
+                obj = self.tracked_objects[object_id]['object']
+                delta = self.get_accumulated_delta(object_id, since_timestamp)
+                if delta:
+                    objects_to_move.append(obj)
+                    total_delta_x += delta[0]
+                    total_delta_y += delta[1]
+        
+        # Average the deltas for the command (they should be similar for grouped movements)
+        if objects_to_move:
+            avg_delta_x = total_delta_x / len(objects_to_move)
+            avg_delta_y = total_delta_y / len(objects_to_move)
+            return MoveCommand(self.scene, objects_to_move, avg_delta_x, avg_delta_y)
+        
+        return None
+    
+    def clear_deltas(self, before_timestamp: float = None):
+        """Clear movement deltas, optionally only those before a timestamp"""
+        if before_timestamp is None:
+            self.movement_deltas.clear()
+            logger.debug("Cleared all movement deltas")
+        else:
+            initial_count = len(self.movement_deltas)
+            self.movement_deltas = [d for d in self.movement_deltas if d.timestamp > before_timestamp]
+            cleared_count = initial_count - len(self.movement_deltas)
+            logger.debug(f"Cleared {cleared_count} movement deltas before timestamp {before_timestamp}")
+    
+    def _get_object_position(self, obj) -> Optional[tuple[float, float]]:
+        """Get the current position of an object"""
+        try:
+            # For entities, get position from shape graphics item
+            if hasattr(obj, 'shape') and obj.shape and obj.shape.graphicsItem:
+                pos = obj.shape.graphicsItem.pos()
+                return (pos.x(), pos.y())
+            
+            # For line groups, we could track waypoint positions or use a representative position
+            elif hasattr(obj, 'arrow') and hasattr(obj.arrow, 'start_point'):
+                return (obj.arrow.start_point.x(), obj.arrow.start_point.y())
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting object position: {e}")
+            return None
+
+
+class BaseUndoCommand(QUndoCommand):
+    """
+    Abstract base class for all undoable commands in the workflow designer.
+    
+    Provides common functionality and enforces the command pattern interface
+    for consistent undo/redo behavior across all operation types.
+    """
+    
+    def __init__(self, scene: 'WFScene', action_type: UndoableAction, description: str, parent=None):
+        super().__init__(parent)
+        self.scene = scene
+        self.action_type = action_type
+        self.description = description
+        
+        # Set command text for UI display
+        self.setText(description)
+        
+        # Timestamp for debugging and history
+        import time
+        self.timestamp = time.time()
+        
+        logger.debug(f"Created {self.__class__.__name__}: {description}")
+    
+    @abstractmethod
+    def redo(self):
+        """Execute the command (must be implemented by subclasses)"""
+        pass
+    
+    @abstractmethod  
+    def undo(self):
+        """Reverse the command (must be implemented by subclasses)"""
+        pass
+    
+    def id(self) -> int:
+        """
+        Return command ID for merging similar commands.
+        
+        Returns:
+            int: Command ID (-1 means no merging)
+        """
+        return -1  # Default: no command compression
+    
+    def mergeWith(self, other: 'BaseUndoCommand') -> bool:
+        """
+        Merge this command with another similar command.
+        
+        Args:
+            other: Another command to potentially merge with
+            
+        Returns:
+            bool: True if commands were merged, False otherwise
+        """
+        return False  # Default: no merging
+
+
+class UndoStack(QUndoStack):
+    """
+    Enhanced QUndoStack with workflow designer specific functionality.
+    
+    Provides additional features like command statistics, history management,
+    command macros, compression, and integration with the workflow designer's architecture.
+    """
+    
+    # Signals for UI updates
+    operationExecuted = Signal(str)  # Emitted when any command is executed
+    macroStarted = Signal(str)  # Emitted when a macro starts
+    macroFinished = Signal(str)  # Emitted when a macro finishes
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        # Configure stack limits
+        self.setUndoLimit(50)  # Reasonable default for memory management
+        
+        # Macro support
+        self._macro_active = False
+        self._macro_description = ""
+        
+        # Command compression settings
+        self._enable_compression = True
+        self._compression_time_window = 1.0  # Seconds - commands within this window can be compressed
+        
+        # Connect to stack signals for logging
+        self.canUndoChanged.connect(self._onCanUndoChanged)
+        self.canRedoChanged.connect(self._onCanRedoChanged)
+        self.indexChanged.connect(self._onIndexChanged)
+    
+    def push(self, command: BaseUndoCommand):
+        """
+        Push a command onto the stack with enhanced logging and compression.
+        
+        Args:
+            command: The command to execute and add to history
+        """
+        logger.info(f"Executing command: {command.text()}")
+        
+        # Check for command compression before pushing
+        if self._enable_compression and self._canCompressCommand(command):
+            logger.debug(f"Command compressed with previous command")
+            return
+        
+        super().push(command)
+        self.operationExecuted.emit(command.text())
+    
+    def beginMacro(self, description: str):
+        """
+        Begin a macro (group of commands that will be undone/redone together).
+        
+        Args:
+            description: Description for the macro command
+        """
+        if self._macro_active:
+            logger.warning(f"Macro already active: {self._macro_description}")
+            return
+        
+        self._macro_active = True
+        self._macro_description = description
+        super().beginMacro(description)
+        
+        logger.info(f"Started macro: {description}")
+        self.macroStarted.emit(description)
+    
+    def endMacro(self):
+        """End the current macro."""
+        if not self._macro_active:
+            logger.warning("No active macro to end")
+            return
+        
+        description = self._macro_description
+        self._macro_active = False
+        self._macro_description = ""
+        super().endMacro()
+        
+        logger.info(f"Finished macro: {description}")
+        self.macroFinished.emit(description)
+    
+    def isMacroActive(self) -> bool:
+        """Check if a macro is currently active."""
+        return self._macro_active
+    
+    def setCompressionEnabled(self, enabled: bool):
+        """Enable or disable command compression."""
+        self._enable_compression = enabled
+        logger.debug(f"Command compression {'enabled' if enabled else 'disabled'}")
+    
+    def setCompressionTimeWindow(self, seconds: float):
+        """Set the time window for command compression."""
+        self._compression_time_window = seconds
+        logger.debug(f"Compression time window set to {seconds} seconds")
+    
+    def _canCompressCommand(self, command: BaseUndoCommand) -> bool:
+        """
+        Check if a command can be compressed with the previous command.
+        
+        Args:
+            command: The command to check for compression
+            
+        Returns:
+            bool: True if command was compressed, False otherwise
+        """
+        if self.count() == 0:
+            return False
+        
+        # Get the most recent command
+        last_command = self.command(self.count() - 1)
+        if not last_command or not isinstance(last_command, BaseUndoCommand):
+            return False
+        
+        # Check if commands have the same ID (indicating they can be merged)
+        if command.id() == -1 or last_command.id() == -1:
+            return False
+        
+        if command.id() != last_command.id():
+            return False
+        
+        # Check time window
+        import time
+        time_diff = command.timestamp - last_command.timestamp
+        if time_diff > self._compression_time_window:
+            return False
+        
+        # Attempt to merge
+        if last_command.mergeWith(command):
+            logger.debug(f"Compressed command: {command.text()} into {last_command.text()}")
+            return True
+        
+        return False
+    
+    def getCommandHistory(self) -> List[str]:
+        """
+        Get a list of all commands in the stack for debugging.
+        
+        Returns:
+            List[str]: Command descriptions in chronological order
+        """
+        history = []
+        for i in range(self.count()):
+            cmd = self.command(i)
+            if cmd:
+                prefix = "→ " if i == self.index() - 1 else "  "
+                history.append(f"{prefix}{cmd.text()}")
+        return history
+    
+    def _onCanUndoChanged(self, canUndo: bool):
+        """Handle undo availability changes"""
+        logger.debug(f"Can undo changed: {canUndo}")
+    
+    def _onCanRedoChanged(self, canRedo: bool):
+        """Handle redo availability changes"""
+        logger.debug(f"Can redo changed: {canRedo}")
+    
+    def _onIndexChanged(self, index: int):
+        """Handle stack index changes"""
+        logger.debug(f"Undo stack index changed to: {index} (count: {self.count()})")
+
+
+class DeleteCommand(BaseUndoCommand):
+    """
+    Command for undoable deletion of workflow designer objects.
+    
+    Handles deletion and restoration of entities and lines with full state preservation,
+    including cascading deletion logic and relationship management.
+    """
+    
+    def __init__(self, scene: 'WFScene', items_to_delete: List[Any], qt_graphics_scene=None):
+        """
+        Initialize deletion command.
+        
+        Args:
+            scene: The workflow scene containing the objects
+            items_to_delete: List of objects to delete (entities and/or lines)
+            qt_graphics_scene: Qt graphics scene for visual cleanup
+        """
+        # Create description based on what's being deleted
+        entity_count = len([item for item in items_to_delete if hasattr(item, 'entityType')])
+        line_count = len([item for item in items_to_delete if hasattr(item, 'srcEntity')])
+        
+        if entity_count and line_count:
+            description = f"Delete {entity_count} entities and {line_count} lines"
+        elif entity_count:
+            description = f"Delete {entity_count} {'entity' if entity_count == 1 else 'entities'}"
+        else:
+            description = f"Delete {line_count} {'line' if line_count == 1 else 'lines'}"
+        
+        super().__init__(scene, UndoableAction.DELETE, description)
+        
+        self.items_to_delete = items_to_delete
+        self.qt_graphics_scene = qt_graphics_scene
+        
+        # State storage for undo
+        self.deleted_snapshots: List[ObjectSnapshot] = []
+        self.deletion_result: Optional['DeletionResult'] = None
+        
+        # Pre-capture state before deletion
+        self._capturePreDeletionState()
+    
+    def _capturePreDeletionState(self):
+        """Capture complete state of objects before deletion for restoration"""
+        from .wfd_deletion_manager import DeletionManager
+        
+        # Create temporary deletion manager to analyze impact
+        temp_deletion_manager = DeletionManager(self.scene, self.qt_graphics_scene)
+        
+        # Separate items by type for analysis
+        entities_to_delete = [item for item in self.items_to_delete if hasattr(item, 'entityType')]
+        lines_to_delete = [item for item in self.items_to_delete if hasattr(item, 'srcEntity')]
+        
+        # Get all items that will be deleted (including cascaded lines)
+        all_lines_to_delete = set(lines_to_delete)
+        
+        # Add cascaded lines from entities
+        for entity in entities_to_delete:
+            connected_lines = entity.getAllConnectedLines()
+            all_lines_to_delete.update(connected_lines)
+        
+        # Capture snapshots of all items that will be deleted
+        logger.debug(f"Capturing state for {len(entities_to_delete)} entities and {len(all_lines_to_delete)} lines")
+        
+        # Serialize entities first (lines reference entities)
+        for entity in entities_to_delete:
+            snapshot = DeepStateSerializer.serialize_entity(entity)
+            self.deleted_snapshots.append(snapshot)
+            logger.debug(f"Captured entity snapshot: {entity.entityKey}")
+        
+        # Then serialize lines
+        for line in all_lines_to_delete:
+            # DEBUG: Capture original line coordinates before deletion
+            if hasattr(line.arrow, 'get_current_path_points'):
+                original_path = line.arrow.get_current_path_points()
+                logger.debug(f"COORDINATE DEBUG - Original line path before deletion ({line.srcEntity.entityKey}->{line.dstEntity.entityKey}): {original_path}")
+            
+            # Log entity positions at deletion time
+            src_center = line.srcEntity.shape.getCurrentCenter()
+            dst_center = line.dstEntity.shape.getCurrentCenter()
+            src_bounds = line.srcEntity.shape.getCurrentBounds()
+            dst_bounds = line.dstEntity.shape.getCurrentBounds()
+            
+            logger.debug(f"COORDINATE DEBUG - Entity positions at deletion time:")
+            logger.debug(f"  Source {line.srcEntity.entityKey}: center={src_center}, bounds={src_bounds}")
+            logger.debug(f"  Dest {line.dstEntity.entityKey}: center={dst_center}, bounds={dst_bounds}")
+            
+            snapshot = DeepStateSerializer.serialize_line(line)
+            self.deleted_snapshots.append(snapshot)
+            logger.debug(f"Captured line snapshot: {line.srcEntity.entityKey}->{line.dstEntity.entityKey}")
+        
+        logger.info(f"Captured {len(self.deleted_snapshots)} object snapshots for undo")
+    
+    def redo(self):
+        """Execute the deletion using existing DeletionManager"""
+        from .wfd_deletion_manager import DeletionManager
+        from .wfd_selection_manager import SelectionManager
+        
+        logger.info(f"Executing deletion: {self.text()}")
+        
+        # Create deletion manager 
+        deletion_manager = DeletionManager(self.scene, self.qt_graphics_scene)
+        
+        # Create temporary selection manager to use existing deletion interface
+        temp_selection = SelectionManager()
+        for item in self.items_to_delete:
+            temp_selection._selected_items.add(item)
+        
+        # Execute deletion using existing system
+        self.deletion_result = deletion_manager.deleteSelected(temp_selection)
+        
+        logger.info(f"Deletion completed: {self.deletion_result.total_items_deleted} items deleted")
+    
+    def undo(self):
+        """Restore deleted objects by restoring them to scene collections without recreating"""
+        if not self.deletion_result:
+            logger.error("No deletion result available for undo - cannot restore objects")
+            return
+        
+        logger.info(f"Undoing deletion: {self.text()}")
+        
+        # CRITICAL FIX: Instead of recreating objects, restore the original objects to scene collections
+        # This preserves object identity and prevents the issues we've been experiencing
+        
+        # Restore workflows to scene collection
+        for workflow in self.deletion_result.deleted_workflows:
+            if workflow not in self.scene.workflows:
+                self.scene.workflows.append(workflow)
+                logger.debug(f"Restored workflow {workflow.entityKey} to scene collection")
+                
+        # Restore statuses to scene collection  
+        for status in self.deletion_result.deleted_statuses:
+            if status not in self.scene.statuses:
+                self.scene.statuses.append(status)
+                logger.debug(f"Restored status {status.entityKey} to scene collection")
+                
+        # Restore lines to scene collection
+        for line in self.deletion_result.deleted_lines:
+            if line not in self.scene.lines:
+                self.scene.lines.append(line)
+                logger.debug(f"Restored line {line.srcEntity.entityKey}->{line.dstEntity.entityKey} to scene collection")
+                
+                # Ensure entity references are restored
+                line.srcEntity.addSourceLine(line)
+                line.dstEntity.addDestLine(line)
+        
+        # Restore Qt graphics items to scene
+        if self.qt_graphics_scene:
+            all_restored_objects = (self.deletion_result.deleted_workflows + 
+                                  self.deletion_result.deleted_statuses + 
+                                  self.deletion_result.deleted_lines)
+            
+            for obj in all_restored_objects:
+                # Restore entity graphics
+                if hasattr(obj, 'shape') and obj.shape and obj.shape.graphicsItem:
+                    if obj.shape.graphicsItem.scene() != self.qt_graphics_scene:
+                        self.qt_graphics_scene.addItem(obj.shape.graphicsItem)
+                        logger.debug(f"Restored graphics item for {obj.entityKey}")
+                        
+                # Restore line graphics  
+                if hasattr(obj, 'get_all_graphics_items'):
+                    for item in obj.get_all_graphics_items():
+                        graphics_item = item.graphicsItem if hasattr(item, 'graphicsItem') else item
+                        if graphics_item and graphics_item.scene() != self.qt_graphics_scene:
+                            self.qt_graphics_scene.addItem(graphics_item)
+                            
+        # Restore selection manager connections
+        for obj in (self.deletion_result.deleted_workflows + 
+                   self.deletion_result.deleted_statuses + 
+                   self.deletion_result.deleted_lines):
+            if hasattr(obj, 'set_selection_manager'):
+                obj.set_selection_manager(self.scene.selection_manager)
+        
+        total_restored = (len(self.deletion_result.deleted_workflows) + 
+                         len(self.deletion_result.deleted_statuses) + 
+                         len(self.deletion_result.deleted_lines))
+        
+        logger.info(f"Restored {total_restored} objects by adding them back to scene collections")
+    
+    def id(self) -> int:
+        """Return command ID for potential merging of similar delete operations"""
+        # Use hash based on operation type for potential merging
+        # Different deletion types should have different IDs to prevent inappropriate merging
+        entity_count = len([item for item in self.items_to_delete if hasattr(item, 'entityType')])
+        line_count = len([item for item in self.items_to_delete if hasattr(item, 'srcEntity')])
+        
+        # Create ID based on operation pattern
+        if entity_count > 0 and line_count > 0:
+            return 1001  # Mixed deletion
+        elif entity_count > 0:
+            return 1002  # Entity-only deletion  
+        else:
+            return 1003  # Line-only deletion
+    
+    def mergeWith(self, other: 'DeleteCommand') -> bool:
+        """
+        Merge this delete command with another similar delete command.
+        
+        This allows multiple rapid deletions to be grouped together for 
+        more efficient undo/redo operations.
+        
+        Args:
+            other: Another DeleteCommand to potentially merge with
+            
+        Returns:
+            bool: True if commands were merged, False otherwise
+        """
+        if not isinstance(other, DeleteCommand):
+            return False
+        
+        # Only merge if the commands have compatible deletion patterns
+        if self.id() != other.id():
+            return False
+        
+        # Check time proximity (should be handled by UndoStack, but double-check)
+        time_diff = abs(other.timestamp - self.timestamp) 
+        if time_diff > 2.0:  # Don't merge commands more than 2 seconds apart
+            return False
+        
+        # Merge the delete operations
+        self.items_to_delete.extend(other.items_to_delete)
+        self.deleted_snapshots.extend(other.deleted_snapshots)
+        
+        # Update description to reflect merged operation
+        entity_count = len([item for item in self.items_to_delete if hasattr(item, 'entityType')])
+        line_count = len([item for item in self.items_to_delete if hasattr(item, 'srcEntity')])
+        
+        if entity_count and line_count:
+            new_description = f"Delete {entity_count} entities and {line_count} lines"
+        elif entity_count:
+            new_description = f"Delete {entity_count} {'entity' if entity_count == 1 else 'entities'}"
+        else:
+            new_description = f"Delete {line_count} {'line' if line_count == 1 else 'lines'}"
+        
+        self.setText(new_description)
+        
+        logger.debug(f"Merged delete commands: now {new_description}")
+        return True
+
+
+# FUTURE COMMAND CLASSES - Framework Extensions
+# 
+# These skeleton classes demonstrate how the undo/redo framework can be extended
+# for additional operations. They provide the structure for implementing:
+# - Object creation (workflows, statuses, lines)
+# - Object movement and resizing
+# - Property editing (colors, text, etc.)
+# - Connection operations (linking entities)
+
+class CreateCommand(BaseUndoCommand):
+    """
+    Command for undoable creation of workflow designer objects.
+    
+    Future implementation would handle creation of entities and lines
+    with full state preservation for undo functionality.
+    """
+    
+    def __init__(self, scene: 'WFScene', object_type: str, creation_data: Dict[str, Any]):
+        description = f"Create {object_type}"
+        super().__init__(scene, UndoableAction.CREATE, description)
+        
+        self.object_type = object_type
+        self.creation_data = creation_data
+        self.created_object = None
+    
+    def redo(self):
+        """Execute the creation - would implement object instantiation"""
+        logger.info(f"Creating {self.object_type} (placeholder implementation)")
+        # TODO: Implement object creation based on object_type and creation_data
+        pass
+    
+    def undo(self):
+        """Reverse the creation - would remove the created object"""
+        logger.info(f"Removing created {self.object_type} (placeholder implementation)")
+        # TODO: Implement object removal
+        pass
+
+
+class MoveCommand(BaseUndoCommand):
+    """
+    Command for undoable movement of workflow designer objects.
+    
+    Handles moving entities and waypoints with delta-based state management
+    for efficient undo/redo. Maintains object integrity and scene registration.
+    """
+    
+    def __init__(self, scene: 'WFScene', items_to_move: List[Any], delta_x: float, delta_y: float):
+        item_count = len(items_to_move)
+        distance = (delta_x ** 2 + delta_y ** 2) ** 0.5
+        if distance > 0.1:
+            description = f"Move {item_count} {'item' if item_count == 1 else 'items'} ({distance:.1f} units)"
+        else:
+            description = f"Move {item_count} {'item' if item_count == 1 else 'items'}"
+        
+        super().__init__(scene, UndoableAction.MOVE, description)
+        
+        self.items_to_move = items_to_move
+        self.delta_x = delta_x
+        self.delta_y = delta_y
+        
+        # Store initial states for validation
+        self.initial_positions = {}
+        self._capture_initial_positions()
+    
+    def _capture_initial_positions(self):
+        """Capture initial positions for all objects being moved"""
+        for item in self.items_to_move:
+            item_id = self._get_item_id(item)
+            position = self._get_item_position(item)
+            if position:
+                self.initial_positions[item_id] = position
+    
+    def redo(self):
+        """Execute the movement - apply position delta"""
+        logger.info(f"Moving {len(self.items_to_move)} items by ({self.delta_x:.1f}, {self.delta_y:.1f})")
+        
+        moved_count = 0
+        for item in self.items_to_move:
+            if self._move_item(item, self.delta_x, self.delta_y):
+                moved_count += 1
+        
+        # Update line connections after moving entities
+        self._update_line_connections()
+        
+        # Ensure objects remain properly registered in scene
+        self._validate_scene_registration()
+        
+        logger.info(f"Successfully moved {moved_count} items")
+    
+    def undo(self):
+        """Reverse the movement - apply negative delta"""
+        logger.info(f"Reversing movement of {len(self.items_to_move)} items")
+        
+        moved_count = 0
+        for item in self.items_to_move:
+            if self._move_item(item, -self.delta_x, -self.delta_y):
+                moved_count += 1
+        
+        # Update line connections after moving entities
+        self._update_line_connections()
+        
+        # Ensure objects remain properly registered in scene
+        self._validate_scene_registration()
+        
+        logger.info(f"Successfully reversed movement of {moved_count} items")
+    
+    def _move_item(self, item: Any, dx: float, dy: float) -> bool:
+        """Move a single item by the given delta"""
+        try:
+            # Handle entities (WFWorkflow, WFStatus)
+            if hasattr(item, 'shape') and item.shape and item.shape.graphicsItem:
+                graphics_item = item.shape.graphicsItem
+                current_pos = graphics_item.pos()
+                new_pos = (current_pos.x() + dx, current_pos.y() + dy)
+                graphics_item.setPos(new_pos[0], new_pos[1])
+                logger.debug(f"Moved entity {getattr(item, 'entityKey', 'unknown')} to {new_pos}")
+                return True
+            
+            # Handle line waypoints (if implemented)
+            elif hasattr(item, 'arrow') and hasattr(item.arrow, 'interactive_waypoints'):
+                # Move all waypoints by the delta
+                for waypoint in item.arrow.interactive_waypoints:
+                    waypoint.x += dx
+                    waypoint.y += dy
+                
+                # Update arrow geometry
+                if hasattr(item.arrow, 'updateGeometry'):
+                    item.arrow.updateGeometry()
+                elif hasattr(item.arrow, 'reconstruct_with_waypoints'):
+                    item.arrow.reconstruct_with_waypoints()
+                
+                logger.debug(f"Moved line waypoints by ({dx:.1f}, {dy:.1f})")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error moving item: {e}")
+            return False
+    
+    def _update_line_connections(self):
+        """Update line connections after entity movements"""
+        try:
+            # Find all lines that connect to moved entities
+            entities_moved = [item for item in self.items_to_move if hasattr(item, 'entityKey')]
+            
+            for entity in entities_moved:
+                # Update all lines connected to this entity
+                all_connected_lines = entity.getAllConnectedLines()
+                for line in all_connected_lines:
+                    if hasattr(line.arrow, 'updateGeometry'):
+                        line.arrow.updateGeometry()
+                    elif hasattr(line.arrow, 'reconstruct'):
+                        line.arrow.reconstruct()
+            
+        except Exception as e:
+            logger.error(f"Error updating line connections: {e}")
+    
+    def _validate_scene_registration(self):
+        """Ensure moved objects remain properly registered in scene collections"""
+        try:
+            for item in self.items_to_move:
+                # Ensure entities are still in scene collections
+                if hasattr(item, 'entityType'):
+                    if hasattr(item, 'statuses') and item not in self.scene.workflows:
+                        logger.warning(f"Workflow {item.entityKey} not in scene collection, re-adding")
+                        self.scene.workflows.append(item)
+                    elif not hasattr(item, 'statuses') and item not in self.scene.statuses:
+                        logger.warning(f"Status {item.entityKey} not in scene collection, re-adding")
+                        self.scene.statuses.append(item)
+                
+                # Ensure lines are still in scene collections
+                elif hasattr(item, 'srcEntity') and item not in self.scene.lines:
+                    logger.warning(f"Line {item.srcEntity.entityKey}->{item.dstEntity.entityKey} not in scene collection, re-adding")
+                    self.scene.lines.append(item)
+                
+                # Reconnect to selection manager if needed
+                if hasattr(item, 'set_selection_manager') and self.scene.selection_manager:
+                    item.set_selection_manager(self.scene.selection_manager)
+            
+        except Exception as e:
+            logger.error(f"Error validating scene registration: {e}")
+    
+    def _get_item_id(self, item: Any) -> str:
+        """Get a unique identifier for an item"""
+        if hasattr(item, 'entityKey'):
+            return item.entityKey
+        elif hasattr(item, 'srcEntity') and hasattr(item, 'dstEntity'):
+            return f"{item.srcEntity.entityKey}->{item.dstEntity.entityKey}"
+        else:
+            return f"item_{id(item)}"
+    
+    def _get_item_position(self, item: Any) -> Optional[tuple[float, float]]:
+        """Get current position of an item"""
+        try:
+            if hasattr(item, 'shape') and item.shape and item.shape.graphicsItem:
+                pos = item.shape.graphicsItem.pos()
+                return (pos.x(), pos.y())
+            elif hasattr(item, 'arrow') and hasattr(item.arrow, 'start_point'):
+                return (item.arrow.start_point.x(), item.arrow.start_point.y())
+            return None
+        except:
+            return None
+    
+    def id(self) -> int:
+        """Return command ID for move command compression"""
+        return 2001  # Move operations can be compressed
+    
+    def mergeWith(self, other: 'MoveCommand') -> bool:
+        """Merge consecutive move operations for the same objects"""
+        if not isinstance(other, MoveCommand):
+            return False
+        
+        # Check if moving the same objects
+        if set(self.items_to_move) != set(other.items_to_move):
+            return False
+        
+        # Merge the deltas
+        self.delta_x += other.delta_x
+        self.delta_y += other.delta_y
+        
+        # Update description if significant movement
+        total_distance = (self.delta_x ** 2 + self.delta_y ** 2) ** 0.5
+        self.setText(f"Move {len(self.items_to_move)} items ({total_distance:.1f} units)")
+        
+        return True
+
+
+class EditCommand(BaseUndoCommand):
+    """
+    Command for undoable editing of object properties.
+    
+    Future implementation would handle text changes, color changes,
+    and other property modifications with before/after state capture.
+    """
+    
+    def __init__(self, scene: 'WFScene', target_object: Any, property_name: str, old_value: Any, new_value: Any):
+        description = f"Edit {property_name}"
+        super().__init__(scene, UndoableAction.EDIT, description)
+        
+        self.target_object = target_object
+        self.property_name = property_name
+        self.old_value = old_value
+        self.new_value = new_value
+    
+    def redo(self):
+        """Execute the edit - would apply new property value"""
+        logger.info(f"Setting {self.property_name} to {self.new_value} (placeholder)")
+        # TODO: Implement property setting
+        pass
+    
+    def undo(self):
+        """Reverse the edit - would restore old property value"""
+        logger.info(f"Restoring {self.property_name} to {self.old_value} (placeholder)")
+        # TODO: Implement property restoration
+        pass
+
+
+class ConnectCommand(BaseUndoCommand):
+    """
+    Command for undoable connection operations.
+    
+    Future implementation would handle creating and removing connections
+    between entities with relationship management.
+    """
+    
+    def __init__(self, scene: 'WFScene', source_entity: 'WFEntity', dest_entity: 'WFEntity', connection_data: Dict[str, Any] = None):
+        description = f"Connect {source_entity.entityKey} to {dest_entity.entityKey}"
+        super().__init__(scene, UndoableAction.CONNECT, description)
+        
+        self.source_entity = source_entity
+        self.dest_entity = dest_entity
+        self.connection_data = connection_data or {}
+        self.created_line = None
+    
+    def redo(self):
+        """Execute the connection - would create line between entities"""
+        logger.info(f"Connecting {self.source_entity.entityKey} to {self.dest_entity.entityKey} (placeholder)")
+        # TODO: Implement line creation and entity relationship setup
+        pass
+    
+    def undo(self):
+        """Reverse the connection - would remove the created line"""
+        logger.info(f"Removing connection from {self.source_entity.entityKey} to {self.dest_entity.entityKey} (placeholder)")
+        # TODO: Implement line removal and relationship cleanup
+        pass
+
+
+class LineManipulationCommand(BaseUndoCommand):
+    """
+    Command for undoable line manipulation operations (waypoint movements, additions, removals).
+    
+    Provides granular undo/redo support for all line modification operations while
+    maintaining object identity consistency throughout the manipulation lifecycle.
+    """
+    
+    def __init__(self, scene: 'WFScene', line_group: 'WFLineGroup', operation_type: str, 
+                 old_waypoints: List['InteractiveWaypoint'], new_waypoints: List['InteractiveWaypoint']):
+        """
+        Initialize line manipulation command.
+        
+        Args:
+            scene: The workflow scene containing the line
+            line_group: The WFLineGroup being manipulated  
+            operation_type: Type of operation ("move_waypoint", "add_waypoint", "remove_waypoint")
+            old_waypoints: Waypoint state before manipulation
+            new_waypoints: Waypoint state after manipulation
+        """
+        description = f"{operation_type.replace('_', ' ').title()} on line {line_group.srcEntity.entityKey}->{line_group.dstEntity.entityKey}"
+        super().__init__(scene, UndoableAction.EDIT, description)
+        
+        self.line_group = line_group
+        self.operation_type = operation_type
+        self.old_waypoints = self._clone_waypoints(old_waypoints)
+        self.new_waypoints = self._clone_waypoints(new_waypoints)
+        
+        # Track object identity for consistency validation
+        self.line_object_id = id(line_group)
+        self.arrow_object_id = id(line_group.arrow)
+        
+    def _clone_waypoints(self, waypoints: List['InteractiveWaypoint']) -> List[Dict]:
+        """Create deep copies of waypoint data for state preservation"""
+        cloned = []
+        for wp in waypoints:
+            cloned.append({
+                'position': (wp.x, wp.y),
+                'is_user_created': wp.is_user_created,
+                'node_id': wp.node_id
+            })
+        return cloned
+        
+    def _restore_waypoints(self, waypoint_data: List[Dict]) -> List['InteractiveWaypoint']:
+        """Recreate InteractiveWaypoint objects from stored data"""
+        from workflow_designer.wfd_interactive_nodes import InteractiveWaypoint
+        
+        restored = []
+        for wp_data in waypoint_data:
+            waypoint = InteractiveWaypoint(
+                wp_data['position'], 
+                is_user_created=wp_data['is_user_created']
+            )
+            waypoint.node_id = wp_data['node_id']  # Preserve original node_id
+            restored.append(waypoint)
+        return restored
+        
+    def redo(self):
+        """Execute the line manipulation - apply new waypoint state"""
+        logger.info(f"Executing line manipulation: {self.text()}")
+        
+        # Validate object identity before proceeding
+        if id(self.line_group) != self.line_object_id:
+            logger.error(f"Line object identity changed! Expected {self.line_object_id}, got {id(self.line_group)}")
+            return
+            
+        # Apply new waypoint configuration
+        new_waypoints = self._restore_waypoints(self.new_waypoints)
+        self._apply_waypoint_state(new_waypoints)
+        
+        logger.info(f"Applied {len(new_waypoints)} waypoints to line")
+        
+    def undo(self):
+        """Reverse the line manipulation - restore old waypoint state"""  
+        logger.info(f"Undoing line manipulation: {self.text()}")
+        
+        # Validate object identity before proceeding
+        if id(self.line_group) != self.line_object_id:
+            logger.error(f"Line object identity changed during undo! Expected {self.line_object_id}, got {id(self.line_group)}")
+            return
+            
+        # Restore old waypoint configuration
+        old_waypoints = self._restore_waypoints(self.old_waypoints)
+        self._apply_waypoint_state(old_waypoints)
+        
+        logger.info(f"Restored {len(old_waypoints)} waypoints to line")
+        
+    def _apply_waypoint_state(self, waypoints: List['InteractiveWaypoint']):
+        """Apply waypoint state to the line group's arrow"""
+        try:
+            # Update arrow's waypoint collection
+            self.line_group.arrow.interactive_waypoints = waypoints
+            
+            # Trigger arrow reconstruction with new waypoints
+            if hasattr(self.line_group.arrow, 'reconstruct_with_waypoints'):
+                self.line_group.arrow.reconstruct_with_waypoints()
+            elif hasattr(self.line_group.arrow, 'updateGeometry'):
+                self.line_group.arrow.updateGeometry()
+                
+            # Update line group's graphics items collection
+            self.line_group.lineSegments = self.line_group.arrow.getGraphicsItems()
+            
+            # Ensure object remains properly registered in scene collections
+            self._validate_scene_registration()
+            
+            logger.debug(f"Successfully applied waypoint state with {len(waypoints)} waypoints")
+            
+        except Exception as e:
+            logger.error(f"Error applying waypoint state: {e}")
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            
+    def _validate_scene_registration(self):
+        """Ensure line remains properly registered in scene collections after manipulation"""
+        if self.line_group not in self.scene.lines:
+            logger.warning(f"Line object not found in scene.lines - adding back to prevent orphaning")
+            self.scene.lines.append(self.line_group)
+            
+    def mergeWith(self, other: 'BaseUndoCommand') -> bool:
+        """
+        Merge with another LineManipulationCommand if they're related operations on the same line.
+        
+        This enables command compression for rapid waypoint movements.
+        """
+        if not isinstance(other, LineManipulationCommand):
+            return False
+            
+        # Only merge operations on the same line within a short time window
+        if (self.line_group is other.line_group and 
+            self.operation_type == other.operation_type and
+            abs(self.timestamp - other.timestamp) < 0.5):  # 500ms window
+            
+            # Update with the latest waypoint state
+            self.new_waypoints = other.new_waypoints
+            self.timestamp = other.timestamp
+            
+            logger.debug(f"Merged line manipulation commands for {self.operation_type}")
+            return True
+            
+        return False
+
+
+class SegmentSplitCommand(BaseUndoCommand):
+    """
+    Command for undoable segment splitting operations.
+    
+    Handles the complex process of splitting a line segment by adding a waypoint,
+    while maintaining proper object identity and scene consistency.
+    """
+    
+    def __init__(self, scene: 'WFScene', line_group: 'WFLineGroup', segment_index: int, 
+                 split_position: tuple, old_waypoints: List['InteractiveWaypoint']):
+        """
+        Initialize segment split command.
+        
+        Args:
+            scene: The workflow scene containing the line
+            line_group: The WFLineGroup being split
+            segment_index: Index of segment being split
+            split_position: (x, y) position where split occurs
+            old_waypoints: Waypoint state before split
+        """
+        description = f"Split segment {segment_index} on line {line_group.srcEntity.entityKey}->{line_group.dstEntity.entityKey}"
+        super().__init__(scene, UndoableAction.EDIT, description)
+        
+        self.line_group = line_group
+        self.segment_index = segment_index
+        self.split_position = split_position
+        self.old_waypoints = self._clone_waypoints(old_waypoints)
+        
+        # Create new waypoint for the split
+        from workflow_designer.wfd_interactive_nodes import InteractiveWaypoint
+        self.new_waypoint = InteractiveWaypoint(split_position, is_user_created=True)
+        
+        # Calculate new waypoint configuration
+        new_waypoints = list(old_waypoints)
+        if segment_index <= 0:
+            new_waypoints.insert(0, self.new_waypoint)
+        elif segment_index >= len(old_waypoints):
+            new_waypoints.append(self.new_waypoint)
+        else:
+            new_waypoints.insert(segment_index, self.new_waypoint)
+            
+        self.new_waypoints = self._clone_waypoints(new_waypoints)
+        
+        # Track object identity
+        self.line_object_id = id(line_group)
+        
+    def _clone_waypoints(self, waypoints: List['InteractiveWaypoint']) -> List[Dict]:
+        """Create deep copies of waypoint data for state preservation"""
+        cloned = []
+        for wp in waypoints:
+            cloned.append({
+                'position': (wp.x, wp.y),
+                'is_user_created': wp.is_user_created,
+                'node_id': wp.node_id
+            })
+        return cloned
+        
+    def _restore_waypoints(self, waypoint_data: List[Dict]) -> List['InteractiveWaypoint']:
+        """Recreate InteractiveWaypoint objects from stored data"""
+        from workflow_designer.wfd_interactive_nodes import InteractiveWaypoint
+        
+        restored = []
+        for wp_data in waypoint_data:
+            waypoint = InteractiveWaypoint(
+                wp_data['position'], 
+                is_user_created=wp_data['is_user_created']
+            )
+            waypoint.node_id = wp_data['node_id']
+            restored.append(waypoint)
+        return restored
+        
+    def redo(self):
+        """Execute the segment split - add new waypoint"""
+        logger.info(f"Executing segment split: {self.text()}")
+        
+        # Validate object identity
+        if id(self.line_group) != self.line_object_id:
+            logger.error(f"Line object identity changed during split! Expected {self.line_object_id}, got {id(self.line_group)}")
+            return
+            
+        # Apply split by setting new waypoint configuration
+        new_waypoints = self._restore_waypoints(self.new_waypoints)
+        self._apply_waypoint_state(new_waypoints)
+        
+        logger.info(f"Split segment {self.segment_index}, now {len(new_waypoints)} waypoints total")
+        
+    def undo(self):
+        """Reverse the segment split - remove the added waypoint"""
+        logger.info(f"Undoing segment split: {self.text()}")
+        
+        # Validate object identity
+        if id(self.line_group) != self.line_object_id:
+            logger.error(f"Line object identity changed during undo! Expected {self.line_object_id}, got {id(self.line_group)}")
+            return
+            
+        # Restore original waypoint configuration (without split waypoint)
+        old_waypoints = self._restore_waypoints(self.old_waypoints)
+        self._apply_waypoint_state(old_waypoints)
+        
+        logger.info(f"Removed split waypoint, restored to {len(old_waypoints)} waypoints")
+        
+    def _apply_waypoint_state(self, waypoints: List['InteractiveWaypoint']):
+        """Apply waypoint state to the line group's arrow"""
+        try:
+            # Update arrow's waypoint collection
+            self.line_group.arrow.interactive_waypoints = waypoints
+            
+            # Trigger arrow reconstruction
+            if hasattr(self.line_group.arrow, 'reconstruct_with_waypoints'):
+                self.line_group.arrow.reconstruct_with_waypoints()
+            elif hasattr(self.line_group.arrow, 'updateGeometry'):
+                self.line_group.arrow.updateGeometry()
+                
+            # Update line group's graphics items
+            self.line_group.lineSegments = self.line_group.arrow.getGraphicsItems()
+            
+            # Ensure scene registration consistency
+            if self.line_group not in self.scene.lines:
+                logger.warning(f"Line object missing from scene.lines - re-adding")
+                self.scene.lines.append(self.line_group)
+                
+            logger.debug(f"Applied waypoint state with {len(waypoints)} waypoints")
+            
+        except Exception as e:
+            logger.error(f"Error applying waypoint state during split: {e}")
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
+
+# COMMAND FACTORY - Helper for creating commands
+# 
+# This factory pattern makes it easy to create commands and ensures
+# consistent initialization across the application.
+
+class CommandFactory:
+    """
+    Factory for creating undo commands with consistent initialization.
+    
+    Provides a centralized way to create commands and ensures proper
+    setup and integration with the undo/redo system.
+    """
+    
+    @staticmethod
+    def createDeleteCommand(scene: 'WFScene', items_to_delete: List[Any], qt_graphics_scene=None) -> DeleteCommand:
+        """Create a properly initialized DeleteCommand"""
+        return DeleteCommand(scene, items_to_delete, qt_graphics_scene)
+    
+    @staticmethod
+    def createMoveCommand(scene: 'WFScene', items_to_move: List[Any], delta_x: float, delta_y: float) -> MoveCommand:
+        """
+        Create a properly initialized MoveCommand with movement tracking integration.
+        
+        Args:
+            scene: The workflow scene
+            items_to_move: List of objects to move
+            delta_x: Horizontal movement delta
+            delta_y: Vertical movement delta
+            
+        Returns:
+            MoveCommand: Configured move command
+        """
+        # Start tracking objects if movement tracker is available
+        if hasattr(scene, 'movement_tracker') and scene.movement_tracker:
+            for item in items_to_move:
+                scene.movement_tracker.start_tracking_object(item)
+        
+        return MoveCommand(scene, items_to_move, delta_x, delta_y)
+    
+    @staticmethod
+    def createMoveCommandFromDeltas(scene: 'WFScene', object_ids: List[str], since_timestamp: float = None) -> Optional[MoveCommand]:
+        """
+        Create a MoveCommand from accumulated movement deltas in the MovementTracker.
+        
+        Args:
+            scene: The workflow scene
+            object_ids: List of object IDs to create command for
+            since_timestamp: Only include movements after this timestamp
+            
+        Returns:
+            MoveCommand or None: Command created from deltas, or None if no movement
+        """
+        if not hasattr(scene, 'movement_tracker') or not scene.movement_tracker:
+            logger.warning("No movement tracker available for creating delta-based move command")
+            return None
+        
+        return scene.movement_tracker.create_move_command_from_deltas(object_ids, since_timestamp)
+    
+    @staticmethod
+    def createLineManipulationCommand(scene: 'WFScene', line_group: 'WFLineGroup', operation_type: str,
+                                    old_waypoints: List['InteractiveWaypoint'], new_waypoints: List['InteractiveWaypoint']) -> LineManipulationCommand:
+        """
+        Create a LineManipulationCommand for waypoint operations.
+        
+        Args:
+            scene: The workflow scene
+            line_group: The line being manipulated
+            operation_type: Type of operation ("move_waypoint", "add_waypoint", "remove_waypoint")
+            old_waypoints: Waypoint state before manipulation
+            new_waypoints: Waypoint state after manipulation
+            
+        Returns:
+            LineManipulationCommand: Configured manipulation command
+        """
+        return LineManipulationCommand(scene, line_group, operation_type, old_waypoints, new_waypoints)
+    
+    @staticmethod
+    def createSegmentSplitCommand(scene: 'WFScene', line_group: 'WFLineGroup', segment_index: int,
+                                 split_position: tuple, old_waypoints: List['InteractiveWaypoint']) -> SegmentSplitCommand:
+        """
+        Create a SegmentSplitCommand for segment splitting operations.
+        
+        Args:
+            scene: The workflow scene
+            line_group: The line being split
+            segment_index: Index of segment being split
+            split_position: (x, y) position where split occurs
+            old_waypoints: Waypoint state before split
+            
+        Returns:
+            SegmentSplitCommand: Configured split command
+        """
+        return SegmentSplitCommand(scene, line_group, segment_index, split_position, old_waypoints)
+
+    @staticmethod
+    def createEditCommand(scene: 'WFScene', target_object: Any, property_name: str, old_value: Any, new_value: Any) -> EditCommand:
+        """Create a properly initialized EditCommand"""
+        return EditCommand(scene, target_object, property_name, old_value, new_value)
+    
+    @staticmethod
+    def createConnectCommand(scene: 'WFScene', source_entity: 'WFEntity', dest_entity: 'WFEntity', connection_data: Dict[str, Any] = None) -> ConnectCommand:
+        """Create a properly initialized ConnectCommand"""
+        return ConnectCommand(scene, source_entity, dest_entity, connection_data)
+    
+    @staticmethod
+    def createCreateCommand(scene: 'WFScene', object_type: str, creation_data: Dict[str, Any]) -> CreateCommand:
+        """Create a properly initialized CreateCommand"""
+        return CreateCommand(scene, object_type, creation_data)
+    
+    @staticmethod
+    def createBatchCommand(scene: 'WFScene', commands: List[BaseUndoCommand], description: str) -> 'BatchCommand':
+        """
+        Create a batch command that executes multiple commands as a single atomic operation.
+        
+        Args:
+            scene: The workflow scene
+            commands: List of commands to execute together
+            description: Description for the batch operation
+            
+        Returns:
+            BatchCommand: Command that executes all sub-commands atomically
+        """
+        return BatchCommand(scene, commands, description)
+    
+    @staticmethod
+    def executeWithMacro(scene: 'WFScene', description: str, command_function):
+        """
+        Execute a function that creates multiple commands within a macro.
+        
+        Args:
+            scene: The workflow scene
+            description: Description for the macro
+            command_function: Function that creates and executes commands
+        
+        Example:
+            def move_and_connect():
+                move_cmd = CommandFactory.createMoveCommand(scene, [entity], 10, 10)
+                scene.undo_stack.push(move_cmd)
+                
+                connect_cmd = CommandFactory.createConnectCommand(scene, entity1, entity2)
+                scene.undo_stack.push(connect_cmd)
+            
+            CommandFactory.executeWithMacro(scene, "Move and connect entities", move_and_connect)
+        """
+        if hasattr(scene, 'undo_stack') and scene.undo_stack:
+            scene.undo_stack.beginMacro(description)
+            try:
+                command_function()
+            finally:
+                scene.undo_stack.endMacro()
+        else:
+            # Fallback: execute without macro
+            logger.warning("No undo stack available for macro execution")
+            command_function()
+
+
+class BatchCommand(BaseUndoCommand):
+    """
+    Command that executes multiple sub-commands as a single atomic operation.
+    
+    Useful for complex operations that involve multiple steps that should be
+    undone and redone together.
+    """
+    
+    def __init__(self, scene: 'WFScene', commands: List[BaseUndoCommand], description: str):
+        super().__init__(scene, UndoableAction.EDIT, description)  # Using EDIT as general type
+        
+        self.commands = commands
+        self.executed_successfully = []
+    
+    def redo(self):
+        """Execute all sub-commands"""
+        logger.info(f"Executing batch command: {self.text()} ({len(self.commands)} operations)")
+        
+        self.executed_successfully.clear()
+        
+        for i, command in enumerate(self.commands):
+            try:
+                command.redo()
+                self.executed_successfully.append(True)
+                logger.debug(f"Executed batch operation {i+1}/{len(self.commands)}: {command.text()}")
+            except Exception as e:
+                logger.error(f"Error executing batch operation {i+1}: {e}")
+                self.executed_successfully.append(False)
+                # Don't stop on error, continue with remaining commands
+        
+        successful_count = sum(self.executed_successfully)
+        logger.info(f"Batch command completed: {successful_count}/{len(self.commands)} operations successful")
+    
+    def undo(self):
+        """Undo all sub-commands in reverse order"""
+        logger.info(f"Undoing batch command: {self.text()}")
+        
+        # Undo in reverse order
+        undone_count = 0
+        for i in reversed(range(len(self.commands))):
+            # Only undo commands that were successfully executed
+            if i < len(self.executed_successfully) and self.executed_successfully[i]:
+                try:
+                    self.commands[i].undo()
+                    undone_count += 1
+                    logger.debug(f"Undone batch operation {len(self.commands)-i}/{len(self.commands)}: {self.commands[i].text()}")
+                except Exception as e:
+                    logger.error(f"Error undoing batch operation {i+1}: {e}")
+        
+        logger.info(f"Batch undo completed: {undone_count} operations undone")
+    
+    def id(self) -> int:
+        """Batch commands should not be merged"""
+        return -1

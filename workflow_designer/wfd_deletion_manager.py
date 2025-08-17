@@ -236,6 +236,24 @@ class DeletionManager:
     def _deleteLineFromScene(self, line: 'WFLineGroup') -> bool:
         """Remove a line from the scene and clean up all references"""
         try:
+            # DEBUG: Log line deletion details
+            logger.debug(f"Attempting to delete line from {line.srcEntity.entityKey} to {line.dstEntity.entityKey}")
+            logger.debug(f"Line object id: {id(line)}")
+            logger.debug(f"Scene has {len(self.scene.lines)} lines total")
+            
+            # Check if line is in scene collection with detailed logging
+            line_found = False
+            for i, scene_line in enumerate(self.scene.lines):
+                logger.debug(f"  Scene line {i}: {scene_line.srcEntity.entityKey} -> {scene_line.dstEntity.entityKey}, id: {id(scene_line)}")
+                if scene_line is line:  # Use 'is' for identity comparison
+                    line_found = True
+                    logger.debug(f"  Found matching line at index {i} using identity comparison")
+                    break
+                elif scene_line == line:  # Also try equality comparison  
+                    logger.debug(f"  Found matching line at index {i} using equality comparison")
+                    line_found = True
+                    break
+            
             # Remove from entity tracking lists
             line.srcEntity.removeSourceLine(line)
             line.dstEntity.removeDestLine(line)
@@ -243,7 +261,49 @@ class DeletionManager:
             # Remove from scene collection
             if line in self.scene.lines:
                 self.scene.lines.remove(line)
-                logger.debug(f"Removed line from {line.srcEntity.entityKey} to {line.dstEntity.entityKey}")
+                logger.debug(f"Successfully removed line from scene collection")
+            else:
+                logger.warning(f"Line not found in scene.lines collection! Found in detailed search: {line_found}")
+                
+                # Try fallback removal strategies
+                removed = False
+                
+                # Strategy 1: Remove by identity if standard 'in' check failed
+                for i, scene_line in enumerate(self.scene.lines):
+                    if scene_line is line:
+                        self.scene.lines.pop(i)
+                        logger.debug(f"Removed line using identity-based search at index {i}")
+                        removed = True
+                        break
+                
+                # Strategy 2: If identity failed, try to find by src/dst entities (for recreated lines)
+                if not removed:
+                    for i, scene_line in enumerate(self.scene.lines):
+                        if (scene_line.srcEntity == line.srcEntity and 
+                            scene_line.dstEntity == line.dstEntity and
+                            getattr(scene_line, 'srcStatusKey', None) == getattr(line, 'srcStatusKey', None) and
+                            getattr(scene_line, 'dstStatusKey', None) == getattr(line, 'dstStatusKey', None)):
+                            
+                            logger.debug(f"Found replacement line by entity matching at index {i}")
+                            logger.debug(f"  Original line id: {id(line)}, replacement line id: {id(scene_line)}")
+                            
+                            # Update entity tracking to point to the scene line instead
+                            self.scene.lines.pop(i)
+                            logger.debug(f"Removed replacement line from scene collection")
+                            removed = True
+                            break
+                
+                if not removed:
+                    logger.error(f"Failed to remove line from scene collection using all strategies")
+                    
+                    # FINAL STRATEGY: Log detailed debugging info for troubleshooting
+                    logger.error(f"  Line to delete: src={line.srcEntity.entityKey}, dst={line.dstEntity.entityKey}, id={id(line)}")
+                    logger.error(f"  Scene collection size: {len(self.scene.lines)}")
+                    logger.error(f"  First few scene lines: {[(l.srcEntity.entityKey, l.dstEntity.entityKey, id(l)) for l in self.scene.lines[:5]]}")
+                    
+                    # Try to clean up anyway - this is better than leaving the scene corrupted
+                    # Note: This creates a minor memory leak but prevents worse corruption
+                    logger.warning(f"  Proceeding with graphics cleanup despite collection removal failure")
             
             # Clean up graphics items will be handled in Phase 4
             self._removeLineGraphicsItems(line)

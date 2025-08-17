@@ -1,4 +1,7 @@
 import os
+import sys
+import argparse
+from datetime import datetime
 # The below is designed to fix/silence the debug output.. so far not working
 os.environ["QT_QPA_EGLFS_NO_TOUCH"] = "1"
 os.environ["QT_LOGGING_RULES"] = "qt.pointer.dispatch.debug=false"
@@ -74,7 +77,31 @@ def setup_global_antialiasing():
         return False
 
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='DLExpress Workflow Designer')
+    parser.add_argument('--log-to-file', type=str, metavar='FILEPATH',
+                        help='Log all output to the specified file instead of console')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debug level logging')
+    return parser.parse_args()
+
 if __name__ == "__main__":
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Configure logging based on arguments
+    if args.log_to_file or args.debug:
+        from workflow_designer.wfd_logger import configure_logging
+        log_level = 'DEBUG' if args.debug else 'INFO'
+        
+        if args.log_to_file:
+            print(f"Logging to file: {args.log_to_file} (level: {log_level})")
+            configure_logging(log_file=args.log_to_file, level=log_level)
+        else:
+            print(f"Debug logging enabled (level: {log_level})")
+            configure_logging(level=log_level)
+    
     # Configure global anti-aliasing BEFORE creating QApplication
     setup_global_antialiasing()
     

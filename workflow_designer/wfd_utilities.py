@@ -501,6 +501,10 @@ class SmartArrow(QObject):
     def get_node_graphics_items(self) -> List[QGraphicsItem]:
         """SmartArrow doesn't support interactive nodes - return empty list"""
         return []
+    
+    def reconstruct_with_waypoints(self):
+        """SmartArrow doesn't support waypoints - this is a no-op for consistency with MultiSegmentArrow"""
+        pass
 
 
 class MultiSegmentArrow(QObject):
@@ -591,6 +595,19 @@ class MultiSegmentArrow(QObject):
     def updateGeometry(self):
         """Recalculate line segments and arrow position based on current entity positions"""
         try:
+            # DEBUG: Log entity status before geometry calculation
+            src_center = self.srcEntity.shape.getCurrentCenter()
+            dst_center = self.dstEntity.shape.getCurrentCenter()
+            src_bounds = self.srcEntity.shape.getCurrentBounds()
+            dst_bounds = self.dstEntity.shape.getCurrentBounds()
+            
+            from workflow_designer.wfd_logger import logger
+            logger.debug(f"MultiSegmentArrow.updateGeometry() called:")
+            logger.debug(f"  Source entity: center={src_center}, bounds={src_bounds}")
+            logger.debug(f"  Dest entity: center={dst_center}, bounds={dst_bounds}")
+            logger.debug(f"  Waypoints: {[(wp.x, wp.y) for wp in self.interactive_waypoints]}")
+            logger.debug(f"  Status keys: src={self.srcStatusKey}, dst={self.dstStatusKey}")
+            
             # Clean up any temporary line items from ghost dragging
             self._cleanup_temp_line_items()
             # Build complete path: source → waypoints → destination
@@ -599,16 +616,21 @@ class MultiSegmentArrow(QObject):
             # Get source entity edge point
             if not self.interactive_waypoints:
                 # No waypoints - direct connection using status-aware calculation
+                logger.debug(f"  No waypoints - calculating direct connection")
                 startPoint, endPoint = calculateLineEndpointsWithStatus(self.srcEntity, self.dstEntity, self.srcStatusKey, self.dstStatusKey)
                 pathPoints = [startPoint, endPoint]
+                logger.debug(f"  Direct path: {pathPoints}")
             else:
                 # Calculate edge intersections to/from waypoints
+                logger.debug(f"  Calculating path with {len(self.interactive_waypoints)} waypoints")
                 srcCenterX, srcCenterY = self.srcEntity.shape.getCurrentCenter()
                 dstCenterX, dstCenterY = self.dstEntity.shape.getCurrentCenter()
                 
                 # First waypoint determines source edge intersection (with status key)
                 first_waypoint = self.interactive_waypoints[0]
+                logger.debug(f"  First waypoint: {first_waypoint.position}")
                 startPoint = self._calculateEntityEdgePoint(self.srcEntity, first_waypoint.x, first_waypoint.y, self.srcStatusKey)
+                logger.debug(f"  Calculated start point: {startPoint}")
                 pathPoints.append(startPoint)
                 
                 # Add all waypoints
@@ -617,8 +639,12 @@ class MultiSegmentArrow(QObject):
                 
                 # Last waypoint determines destination edge intersection (with status key)
                 last_waypoint = self.interactive_waypoints[-1]
+                logger.debug(f"  Last waypoint: {last_waypoint.position}")
                 endPoint = self._calculateEntityEdgePoint(self.dstEntity, last_waypoint.x, last_waypoint.y, self.dstStatusKey)
+                logger.debug(f"  Calculated end point: {endPoint}")
                 pathPoints.append(endPoint)
+                
+                logger.debug(f"  Complete path: {pathPoints}")
             
             # Update line segments
             for i, lineItem in enumerate(self.lineItems):
@@ -1065,3 +1091,19 @@ class MultiSegmentArrow(QObject):
     def _on_waypoint_removed(self, waypoint: 'InteractiveWaypoint'):
         """Handle waypoint removal from node manager"""
         self.remove_waypoint(waypoint)
+    
+    def reconstruct_with_waypoints(self):
+        """Reconstruct arrow with current waypoints - called by undo system after waypoint manipulation
+        
+        This method exists to ensure the MultiSegmentArrow is properly reconstructed when
+        waypoints have been modified through the interactive node system.
+        """
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"reconstruct_with_waypoints called for arrow with {len(self.interactive_waypoints)} waypoints")
+        
+        # Simply recreate line segments and update geometry
+        # The waypoints are already correct in self.interactive_waypoints
+        self._recreateLineSegments()
+        self.updateGeometry()
+        
+        logger.debug("reconstruct_with_waypoints completed")

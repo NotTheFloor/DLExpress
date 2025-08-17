@@ -14,6 +14,9 @@ from workflow_designer.wfd_shape import Shape, ShapeEllipse, ShapeLine, ShapeRec
 from workflow_designer.wfd_utilities import addArrowToLineItem, SmartArrow, MultiSegmentArrow
 from workflow_designer.wfd_selection_manager import SelectionManager
 from workflow_designer.wfd_xml import createObjectListFromXMLString
+from workflow_designer.wfd_undo_system import UndoStack
+from workflow_designer.wfd_logger import logger
+from workflow_designer.wfd_selection_manager import ThemeDetector
 
 if TYPE_CHECKING:
     from workflow_designer.scene_manager import WorkflowSceneManager
@@ -235,7 +238,6 @@ class WFLineGroup:
         
         # Create node manager for MultiSegmentArrow
         if hasattr(self.arrow, 'create_node_manager'):
-            from workflow_designer.wfd_selection_manager import ThemeDetector
             selection_color = ThemeDetector.get_selection_color()
             node_manager = self.arrow.create_node_manager(selection_color)
     
@@ -306,6 +308,15 @@ class WFScene:
         
         # Create selection manager for this scene
         self.selection_manager = SelectionManager()
+        
+        # Create undo/redo stack for this scene
+        #self.undo_stack = UndoStack()
+        #logger.debug(f"Created undo stack for scene: {self.sceneWorkflow.Title}")
+        
+        # Create movement tracker for this scene
+        from workflow_designer.wfd_undo_system import MovementTracker
+        self.movement_tracker = MovementTracker(self)
+        logger.debug(f"Created movement tracker for scene: {self.sceneWorkflow.Title}")
 
         nodes, links = createObjectListFromXMLString(self.dlPlacement.LayoutData)
         self.xmlObjects: XMLObject = { 

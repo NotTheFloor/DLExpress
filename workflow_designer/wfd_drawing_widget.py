@@ -78,9 +78,13 @@ class CustomGraphicsView(QGraphicsView):
             return False
     
     def keyPressEvent(self, event):
-        """Handle keyboard events, particularly Delete key for object deletion"""
+        """Handle keyboard events, particularly Delete key for object deletion and undo/redo"""
         if event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             self._handleDeleteKey()
+        elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
+            self._handleUndoKey()
+        elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
+            self._handleRedoKey()
         else:
             # Call parent handler for other keys
             super().keyPressEvent(event)
@@ -120,18 +124,68 @@ class CustomGraphicsView(QGraphicsView):
         if entities:
             impact = deletion_manager.getImpactedItems(entities)
             logger.info(f"Delete impact: {impact['entities']} entities + {impact['cascaded_lines']} connected lines = {impact['total_items']} total items")
-        
-        # Perform the deletion
-        try:
-            result = deletion_manager.deleteSelected(selection_manager)
-            logger.info(f"Deletion completed: {result.total_items_deleted} items deleted")
+
+        # Temporary hard delete
+        deletion_manager.deleteSelected(selection_manager)
+
+        ## UNDO ISSUES : Following code is removed for now
+        # Perform the deletion using undo/redo command pattern
+        """try:
+            from .wfd_undo_system import CommandFactory
+            
+            # Create undoable delete command using factory
+            delete_command = CommandFactory.createDeleteCommand(
+                scene=self._wf_scene, 
+                items_to_delete=list(selected_items),
+                qt_graphics_scene=qt_scene
+            )
+            
+            # Execute command through undo stack (this will call redo() automatically)
+            self._wf_scene.undo_stack.push(delete_command)
+            
+            logger.info(f"Undoable deletion executed: {delete_command.text()}")
             
             # Refresh rendering settings after deletion (scene complexity may have changed)
             if hasattr(self.parent(), 'refresh_rendering_settings'):
                 self.parent().refresh_rendering_settings()
                 
         except Exception as e:
-            logger.error(f"Error during deletion: {e}")
+            logger.error(f"Error during undoable deletion: {e}")
+        """
+
+    def _handleUndoKey(self):
+        """Handle Ctrl+Z key press - undo last command"""
+        logger.warning("Undo currently removed")
+        return
+
+        if not self._wf_scene or not hasattr(self._wf_scene, 'undo_stack'):
+            logger.warning("No scene or undo stack available for undo")
+            return
+        
+        undo_stack = self._wf_scene.undo_stack
+        if undo_stack.canUndo():
+            command_text = undo_stack.undoText()
+            undo_stack.undo()
+            logger.info(f"Undid: {command_text}")
+        else:
+            logger.debug("Nothing to undo")
+    
+    def _handleRedoKey(self):
+        """Handle Ctrl+Y key press - redo last undone command"""
+        logger.warning("Redo is currently disabled")
+        return
+        
+        if not self._wf_scene or not hasattr(self._wf_scene, 'undo_stack'):
+            logger.warning("No scene or undo stack available for redo")
+            return
+        
+        undo_stack = self._wf_scene.undo_stack
+        if undo_stack.canRedo():
+            command_text = undo_stack.redoText()
+            undo_stack.redo()
+            logger.info(f"Redid: {command_text}")
+        else:
+            logger.debug("Nothing to redo")
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -325,6 +379,23 @@ class DrawingWidget(QFrame):
     def refresh_rendering_settings(self):
         """Refresh rendering settings - useful after scene changes or preference updates"""
         self._configure_rendering_quality()
+    
+    def get_undo_redo_status(self) -> dict:
+        """Get current undo/redo availability and command text"""
+        if not self.currentWorkflow or self.currentWorkflow not in self.sceneManagerDict:
+            return {'can_undo': False, 'can_redo': False, 'undo_text': '', 'redo_text': ''}
+        
+        wf_scene = self.sceneManagerDict[self.currentWorkflow]
+        if not hasattr(wf_scene, 'undo_stack'):
+            return {'can_undo': False, 'can_redo': False, 'undo_text': '', 'redo_text': ''}
+        
+        undo_stack = wf_scene.undo_stack
+        return {
+            'can_undo': undo_stack.canUndo(),
+            'can_redo': undo_stack.canRedo(),
+            'undo_text': undo_stack.undoText() if undo_stack.canUndo() else '',
+            'redo_text': undo_stack.redoText() if undo_stack.canRedo() else ''
+        }
 
 
     def change_workflow(self, wfTitle):

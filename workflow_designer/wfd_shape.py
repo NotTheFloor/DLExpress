@@ -25,13 +25,26 @@ class ExtendedRect(QGraphicsRectItem):
 
 class ExtendedEllipse(QGraphicsEllipseItem):
     def __init__(self, rect: Rect, wfdParent=None, *args, **kwargs):
+        # DEBUG: Log ellipse construction details
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"ExtendedEllipse construction:")
+        logger.debug(f"  rect.width={rect.width}, rect.height={rect.height}")
+        logger.debug(f"  rect.rx={getattr(rect, 'rx', 'N/A')}, rect.ry={getattr(rect, 'ry', 'N/A')}")
+        logger.debug(f"  rect.cx={getattr(rect, 'cx', 'N/A')}, rect.cy={getattr(rect, 'cy', 'N/A')}")
+        logger.debug(f"  rect.left={rect.left}, rect.top={rect.top}")
+        
         super().__init__(0, 0, rect.width, rect.height, *args, **kwargs)
+        
+        logger.debug(f"  Created QGraphicsEllipseItem with rect: {self.rect()}")
+        
         self.wfdParent = wfdParent
 
         if wfdParent is None:
             raise ValueError("wfdParent cannot be None in ExtendedEllipse")
 
         self.setPos(rect.left, rect.top)
+        logger.debug(f"  Set position to: {self.pos()}")
+        logger.debug(f"  Final boundingRect: {self.boundingRect()}")
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange:
@@ -70,14 +83,32 @@ class Shape(QObject):
         pos = self.graphicsItem.pos()
         
         # Calculate current center based on graphics item position and rect size
+        # NOTE: For ellipses, width/height might not be the correct dimensions
         currentCenterX = pos.x() + self.rect.width / 2
         currentCenterY = pos.y() + self.rect.height / 2
+        
+        # DEBUG: Log calculation details
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"getCurrentCenter() for shape type {type(self).__name__}:")
+        logger.debug(f"  Graphics pos: {pos}")
+        logger.debug(f"  Rect dimensions: width={self.rect.width}, height={self.rect.height}")
+        logger.debug(f"  Rect ellipse dims: rx={getattr(self.rect, 'rx', 'N/A')}, ry={getattr(self.rect, 'ry', 'N/A')}")
+        logger.debug(f"  Calculated center: ({currentCenterX}, {currentCenterY})")
         
         return currentCenterX, currentCenterY
     
     def getCurrentBounds(self) -> Tuple[float, float, float, float]:
         """Get current bounds (left, top, width, height) from graphics item position"""
         pos = self.graphicsItem.pos()
+        
+        # DEBUG: Log calculation details
+        from workflow_designer.wfd_logger import logger
+        logger.debug(f"getCurrentBounds() for shape type {type(self).__name__}:")
+        logger.debug(f"  Graphics pos: {pos}")
+        logger.debug(f"  Rect dimensions: width={self.rect.width}, height={self.rect.height}")
+        logger.debug(f"  Rect ellipse dims: rx={getattr(self.rect, 'rx', 'N/A')}, ry={getattr(self.rect, 'ry', 'N/A')}")
+        logger.debug(f"  Calculated bounds: ({pos.x()}, {pos.y()}, {self.rect.width}, {self.rect.height})")
+        
         return pos.x(), pos.y(), self.rect.width, self.rect.height
     
     def setSelected(self, selected: bool, selection_color: QColor):
