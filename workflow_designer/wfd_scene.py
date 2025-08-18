@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, TypedDict, TYPE_CHECKING, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 
@@ -17,6 +17,7 @@ from workflow_designer.wfd_xml import createObjectListFromXMLString
 from workflow_designer.wfd_undo_system import UndoStack
 from workflow_designer.wfd_logger import logger
 from workflow_designer.wfd_selection_manager import ThemeDetector
+from workflow_designer.wfd_undo_system import MovementTracker
 
 if TYPE_CHECKING:
     from workflow_designer.scene_manager import WorkflowSceneManager
@@ -296,8 +297,12 @@ class WFLineGroup:
         if hasattr(self.arrow, 'hide_nodes'):
             self.arrow.hide_nodes()
 
-class WFScene:
-    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager"):
+class WFScene(QObject):
+    sceneSelectionChanged = Signal(str, set)
+
+    def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager", parent=None):
+        super().__init__(parent)
+
         self.sceneWorkflow: Workflow = sceneWorkflow
         self.dlPlacement: WorkflowPlacement = dlPlacement
         self.sceneManager = sceneManager
@@ -314,8 +319,8 @@ class WFScene:
         #logger.debug(f"Created undo stack for scene: {self.sceneWorkflow.Title}")
         
         # Create movement tracker for this scene
-        from workflow_designer.wfd_undo_system import MovementTracker
-        self.movement_tracker = MovementTracker(self)
+        # UNDO ISSUES
+        #self.movement_tracker = MovementTracker(self)
         logger.debug(f"Created movement tracker for scene: {self.sceneWorkflow.Title}")
 
         nodes, links = createObjectListFromXMLString(self.dlPlacement.LayoutData)
@@ -326,6 +331,7 @@ class WFScene:
 
         self.createEntitiesFromXML()
         self._connectSelectionManager()
+        self.selection_manager.selectionChanged.connect(self._selectionChanged)
 
     def getWorkflowByKey(self, key) -> Optional[WFWorkflow]:
         return get_object_from_list(self.workflows, "entityKey", key)
@@ -411,6 +417,9 @@ class WFScene:
         # Connect line groups
         for line in self.lines:
             line.set_selection_manager(self.selection_manager)
+
+    def _selectionChanged(self, selectionSet: set):
+        self.sceneSelectionChanged.emit(self.sceneWorkflow.WorkflowKey, selectionSet) 
 
 
 @dataclass

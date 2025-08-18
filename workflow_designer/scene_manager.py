@@ -6,10 +6,15 @@ from workflow_designer.wfd_logger import logger
 from doclink_py.models.workflows import Workflow, WorkflowActivity, WorkflowPlacement
 from doclink_py.models.doclink_type_utilities import *   
 
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsTextItem 
 
-class WorkflowSceneManager:
-    def __init__(self, doclink):
+class WorkflowSceneManager(QObject):
+    sceneSelectionChanged = Signal()
+
+    def __init__(self, doclink, parent=None):
+        super().__init__(parent)
+
         try:
             logger.info("Initializing WorkflowSceneManager")
             
@@ -46,6 +51,10 @@ class WorkflowSceneManager:
         except Exception as e:
             logger.critical(f"Failed to initialize WorkflowSceneManager: {e}")
             raise
+
+    def _sceneSelectionChanged(self, wfKey, selectionSet):
+        logger.debug(f"Scene selection change for workflow key {wfKey}")
+        self.sceneSelectionChanged.emit()
 
     def getStatusSequence(self, workflowKey: str) -> list:
         """Gets all statuses from a workflow sorted by suequence numbers"""
@@ -124,6 +133,7 @@ class WorkflowSceneManager:
                     # Store reference by WorkflowKey for later access
                     scene_key = str(wf.WorkflowKey)
                     self.wfSceneDict[scene_key] = wf_scene
+                    wf_scene.sceneSelectionChanged.connect(self._sceneSelectionChanged)
                     
                 except Exception as e:
                     logger.error(f"Error creating scene for placement {placement.WorkflowID}: {e}")
