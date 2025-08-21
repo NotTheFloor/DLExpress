@@ -44,6 +44,8 @@ class WorkflowSceneManager(QObject):
             self.newScenes: list[WFScene] = []
             self.wfSceneDict: dict[str, WFScene] = {}  # Map of WorkflowKey -> WFScene
 
+            self.current_workflow_key = None
+
             self.createScenes()
             self.buildGraphicsScenes()
             
@@ -51,6 +53,20 @@ class WorkflowSceneManager(QObject):
         except Exception as e:
             logger.critical(f"Failed to initialize WorkflowSceneManager: {e}")
             raise
+
+    def get_current_workflow(self):
+        if self.current_workflow_key:
+            return self.wfSceneDict[self.current_workflow_key]
+
+        logger.error(f"Error: Attempted to return workflow before current workflow key assigned")
+        return None
+
+    def change_current_workflow(self, new_key):
+        if new_key not in self.wfSceneDict.keys():
+            logger.error(f"Error: key {new_key} does not exist in workflow maps")
+
+        logger.debug(f"Setting current workflow to: {new_key}")
+        self.current_workflow_key = new_key
 
     def _sceneSelectionChanged(self, wfKey, selectionSet):
         logger.debug(f"Scene selection change for workflow key {wfKey}")

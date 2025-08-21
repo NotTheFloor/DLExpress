@@ -113,8 +113,10 @@ class DeletionManager:
         
         # Perform deletion with cascading
         if entities_to_delete:
+            logger.debug(f"Deleting {len(entities_to_delete)} and {len(lines_to_delete)} lines")
             return self.deleteEntities(entities_to_delete, additional_lines=lines_to_delete)
         else:
+            logger.debug(f"Deleting {len(lines_to_delete)} lines")
             return self.deleteLines(lines_to_delete)
     
     def deleteEntities(self, entities: List['WFEntity'], additional_lines: List['WFLineGroup'] = None) -> DeletionResult:
@@ -350,6 +352,8 @@ class DeletionManager:
             if hasattr(line, 'get_all_graphics_items'):
                 # Use the method from WFLineGroup to get all items
                 all_items = line.get_all_graphics_items()
+                print("r---")
+                print(len(all_items))
             else:
                 # Fallback to lineSegments
                 all_items = line.lineSegments
@@ -358,10 +362,22 @@ class DeletionManager:
                 try:
                     # Handle both wrapped objects and raw Qt items
                     graphics_item = item.graphicsItem if hasattr(item, 'graphicsItem') else item
+
+                    print(type(item))
+                    
+                    print(type(graphics_item))
                     
                     if graphics_item and graphics_item.scene() == self.qt_graphics_scene:
                         self.qt_graphics_scene.removeItem(graphics_item)
                         logger.debug(f"Removed line graphics item")
+                    else:
+                        logger.error("How the fuck you just going to ignore this???")
+                        if hasattr(item, 'graphicsItem'):
+                            logger.error("The pain")
+                        if graphics_item:
+                            logger.error("Hot damn")
+                            if graphics_item.scene():
+                                logger.error("Goodness gracious")
                         
                 except Exception as item_error:
                     logger.error(f"Error removing individual line item: {item_error}")

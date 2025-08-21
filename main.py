@@ -1,4 +1,9 @@
 import os
+os.environ["QT_LOGGING_RULES"] = (
+    "qt.pointer.dispatch=false;"           # blanket
+    "qt.pointer.dispatch.info=false;"      # belt
+    "qt.pointer.dispatch.warning=false"    # suspenders
+)
 import sys
 import argparse
 from datetime import datetime
@@ -10,6 +15,11 @@ from typing import Optional
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QVBoxLayout
 from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtCore import QLoggingCategory
+# Reinforce with programmatic rule (optional but helpful if Qt loaded super early via some other import)
+QLoggingCategory.setFilterRules(os.environ["QT_LOGGING_RULES"])
+
+from qt_material import apply_stylesheet
 
 from workflow_designer.wfd_window import WorkflowDesignerWindow
 from connect_window import ConnectWindow
@@ -107,6 +117,8 @@ if __name__ == "__main__":
     
     # Going to do some xml testing here
     app = QApplication([])
+    app.setStyle("Fusion")
+    #apply_stylesheet(app, "dark_teal.xml")
     main_window = MainWindow()
     main_window.show()
     app.exec()

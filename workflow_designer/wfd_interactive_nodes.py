@@ -86,7 +86,7 @@ class WaypointNode(QGraphicsEllipseItem):
         self.creation_timestamp = time.time()
         self.last_known_scene_pos = self.scenePos()
         self.last_known_item_pos = self.pos()
-        self._log_coordinate_state("CREATION")
+        #self._log_coordinate_state("CREATION")
         
         # Visual properties
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -120,6 +120,8 @@ class WaypointNode(QGraphicsEllipseItem):
         super().hoverLeaveEvent(event)
     
     def mousePressEvent(self, event):
+        print(f"*************DOWN")
+        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton:
             self.is_dragging = True
             self.drag_start_pos = self.pos()
@@ -133,17 +135,21 @@ class WaypointNode(QGraphicsEllipseItem):
             # DEBUG: Log coordinate state at press  
             import time
             time_since_creation = time.time() - self.creation_timestamp if self.creation_timestamp else 0
-            print(f"\n🔴 STARTING DRAG SESSION {self.drag_session_count}: Node {self.waypoint.node_id[:8]}... created {time_since_creation:.2f}s ago")
-            self._log_coordinate_state("MOUSE_PRESS", event)
+            #print(f"\n🔴 STARTING DRAG SESSION {self.drag_session_count}: Node {self.waypoint.node_id[:8]}... created {time_since_creation:.2f}s ago")
+            #self._log_coordinate_state("MOUSE_PRESS", event)
         super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
         if self.is_dragging:
             self.move_count += 1
+
+            
+            print(f"*************")
+            print(len(self.scene().items()))
             
             # DEBUG: Enhanced logging for critical moves to verify fix
-            if self.move_count <= 3:
-                self._log_coordinate_state(f"WAYPOINT_MOVE_{self.move_count}_FIXED", event)
+            #if self.move_count <= 3:
+                #self._log_coordinate_state(f"WAYPOINT_MOVE_{self.move_count}_FIXED", event)
             
             # COORDINATE FIX: Use event.scenePos() instead of self.pos() to avoid Qt coordinate corruption
             scene_pos = event.scenePos()
@@ -159,31 +165,34 @@ class WaypointNode(QGraphicsEllipseItem):
         # Do NOT call super().mouseMoveEvent(event) to prevent Qt's default ItemIsMovable behavior
     
     def mouseReleaseEvent(self, event):
+
+        print(f"*************UP")
+        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton and self.is_dragging:
             self.is_dragging = False
             self.setPen(self._hover_pen)
             self.setBrush(self._hover_brush)
             
             # DEBUG: Log coordinate state at release
-            print(f"🔵 ENDING DRAG SESSION {self.drag_session_count} after {self.move_count} moves")
-            self._log_coordinate_state("MOUSE_RELEASE", event)
+            #print(f"🔵 ENDING DRAG SESSION {self.drag_session_count} after {self.move_count} moves")
+            #self._log_coordinate_state("MOUSE_RELEASE", event)
             
-            print(f"🟡 CALLING on_waypoint_drag_finished - watch for position changes...")
+            #print(f"🟡 CALLING on_waypoint_drag_finished - watch for position changes...")
             # Final update and check for merges
             self.node_manager.on_waypoint_drag_finished(self.waypoint)
             
-            print(f"🟢 FINISHED on_waypoint_drag_finished - checking final state...")
-            self._log_coordinate_state("POST_DRAG_FINISHED")
+            #print(f"🟢 FINISHED on_waypoint_drag_finished - checking final state...")
+            #self._log_coordinate_state("POST_DRAG_FINISHED")
         super().mouseReleaseEvent(event)
     
     def update_position(self, new_pos: Tuple[float, float]):
         """Update visual position to match waypoint position"""
-        print(f"🔶 EXTERNAL POSITION UPDATE: Node {self.waypoint.node_id[:8]}... being moved to {new_pos}")
+        #print(f"🔶 EXTERNAL POSITION UPDATE: Node {self.waypoint.node_id[:8]}... being moved to {new_pos}")
         self.setPos(new_pos[0], new_pos[1])
         self.waypoint.position = new_pos
         
         # DEBUG: Log position update
-        self._log_coordinate_state("EXTERNAL_UPDATE_POSITION")
+        #self._log_coordinate_state("EXTERNAL_UPDATE_POSITION")
     
     def set_selection_color(self, color: QColor):
         """Update colors based on current theme"""
@@ -311,6 +320,9 @@ class MidpointNode(QGraphicsRectItem):
         super().hoverLeaveEvent(event)
     
     def mousePressEvent(self, event):
+
+        print(f"*************UPDOWN")
+        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton:
             self.is_dragging = True
             self.setPen(self._drag_pen)
@@ -324,6 +336,9 @@ class MidpointNode(QGraphicsRectItem):
     
     def mouseMoveEvent(self, event):
         if self.is_dragging:
+
+            print(f"*************")
+            print(len(self.scene().items()))
             self.has_been_dragged = True
             
             # COORDINATE FIX: Use event.scenePos() instead of self.pos() to avoid Qt coordinate corruption
@@ -340,6 +355,10 @@ class MidpointNode(QGraphicsRectItem):
         # Do NOT call super().mouseMoveEvent(event) to prevent Qt's default ItemIsMovable behavior
     
     def mouseReleaseEvent(self, event):
+
+        print(f"*************UPUP")
+        print(len(self.scene().items()))
+        self.node_manager._scene = self.scene()
         if event.button() == Qt.LeftButton and self.is_dragging:
             self.is_dragging = False
             
@@ -357,8 +376,9 @@ class MidpointNode(QGraphicsRectItem):
                 
             # Clean up ghost waypoint
             self.ghost_waypoint = None
+
         super().mouseReleaseEvent(event)
-    
+
     def set_selection_color(self, color: QColor):
         """Update colors based on current theme"""
         self._drag_pen = QPen(color, 2)
@@ -373,9 +393,10 @@ class LineNodeManager(QObject):
     waypoint_removed = Signal(InteractiveWaypoint)
     geometry_update_requested = Signal()
     
-    def __init__(self, arrow: "MultiSegmentArrow", selection_color: QColor, parent=None):
+    def __init__(self, arrow: "MultiSegmentArrow", selection_color: QColor, parent=None, scene=None):
         super().__init__(parent)
         
+        self._scene = scene
         self.arrow = arrow
         self.selection_color = selection_color
         self.waypoint_nodes: List[WaypointNode] = []
@@ -386,6 +407,9 @@ class LineNodeManager(QObject):
         self.merge_angle_threshold = 5.0  # degrees
         self.merge_distance_threshold = 10.0  # pixels
         
+    def scene(self):
+        return self._scene
+
     def create_nodes(self, waypoints: List[InteractiveWaypoint]):
         """Create all waypoint and midpoint nodes"""
         # Validate waypoints before creating nodes
@@ -543,6 +567,7 @@ class LineNodeManager(QObject):
                 print("Warning: Could not get line group for undo command")
                 return
                 
+            """
             scene = None
             # Try to get scene from source entity
             if hasattr(line_group.srcEntity, '_selection_manager'):
@@ -554,7 +579,9 @@ class LineNodeManager(QObject):
                     if hasattr(attr, 'lines') and line_group in attr.lines:
                         scene = attr
                         break
+            """
                         
+            scene = self.scene()
             if not scene:
                 print("Warning: Could not find scene for undo command")
                 return
@@ -565,6 +592,8 @@ class LineNodeManager(QObject):
             current_waypoints = list(self.arrow.interactive_waypoints)
             
             # Create the command with current state (this is a simplified version)
+            # UNDO ISSUES
+            """
             from workflow_designer.wfd_undo_system import CommandFactory
             command = CommandFactory.createLineManipulationCommand(
                 scene, line_group, "move_waypoint", current_waypoints, current_waypoints
@@ -573,14 +602,21 @@ class LineNodeManager(QObject):
             # Note: For proper implementation, we need to track the before/after states
             # This will be enhanced in the next phase
             print(f"Created waypoint move command for {moved_waypoint.node_id}")
-            
+            """
         except Exception as e:
             print(f"Error creating waypoint move command: {e}")
             import traceback
             traceback.print_exc()
+
     
     def split_segment_at_midpoint(self, segment_index: int, position: Tuple[float, float]):
         """Split a segment by creating new waypoint at midpoint using undo system"""
+
+        self._fallback_split_segment(segment_index, position)
+        return
+
+        # UNDO ISSUES
+
         try:
             # Get the scene and line group for undo command
             line_group = getattr(self.arrow, '_parent_line_group', None)
@@ -589,7 +625,7 @@ class LineNodeManager(QObject):
                 self._fallback_split_segment(segment_index, position)
                 return
                 
-            scene = self._get_scene_from_line_group(line_group)
+            scene = self.scene() #self._get_scene_from_line_group(line_group)
             if not scene:
                 print("Warning: Could not find scene for segment split")
                 self._fallback_split_segment(segment_index, position)
@@ -809,7 +845,7 @@ class LineNodeManager(QObject):
                         print(f"    Restored position for waypoint {node.waypoint.node_id}: {saved_pos}")
                         
                         # DEBUG: Log coordinate state after restoration
-                        node._log_coordinate_state("POSITION_RESTORED")
+                        #node._log_coordinate_state("POSITION_RESTORED")
                     else:
                         print(f"    Warning: Invalid saved position for waypoint {node.waypoint.node_id}: {saved_pos}")
                 else:

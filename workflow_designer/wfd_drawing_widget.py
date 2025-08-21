@@ -91,6 +91,10 @@ class CustomGraphicsView(QGraphicsView):
     
     def _handleDeleteKey(self):
         """Handle Delete key press - delete selected items"""
+        
+        print("s------")
+        print(len(self.scene().items()))
+
         if not self._wf_scene or not hasattr(self._wf_scene, 'selection_manager'):
             logger.warning("No scene or selection manager available for deletion")
             return
@@ -127,6 +131,11 @@ class CustomGraphicsView(QGraphicsView):
 
         # Temporary hard delete
         deletion_manager.deleteSelected(selection_manager)
+
+        print("------")
+        print(len(self.scene().items()))
+
+        self.parent().refresh_rendering_settings()
 
         ## UNDO ISSUES : Following code is removed for now
         # Perform the deletion using undo/redo command pattern

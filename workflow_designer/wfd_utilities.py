@@ -856,7 +856,7 @@ class MultiSegmentArrow(QObject):
         logger.debug(f"Line visual update: {len(path_points)} points → {required_segments} segments (have {available_segments} items)")
         
         # Create temporary line items if we need more segments than we have
-        if required_segments > available_segments:
+        if required_segments > available_segments + len(self._temp_line_items):
             logger.info(f"Creating {required_segments - available_segments} temporary line segments for ghost dragging")
             
             # Create additional temporary line items
@@ -878,7 +878,7 @@ class MultiSegmentArrow(QObject):
                 
                 # Setup selection for temporary line item
                 self._setupLineSelection(temp_lineItem)
-        else:
+        elif required_segments == available_segments:
             # Clean up any existing temporary line items if we don't need them
             self._cleanup_temp_line_items()
         
@@ -1087,6 +1087,8 @@ class MultiSegmentArrow(QObject):
     def _on_waypoint_added(self, waypoint: 'InteractiveWaypoint', segment_index: int):
         """Handle waypoint addition from node manager"""
         self.add_waypoint_at_index(waypoint, segment_index)
+        self._parent_line_group.lineSegments = []
+        self._parent_line_group.lineSegments.extend(self.getGraphicsItems())
     
     def _on_waypoint_removed(self, waypoint: 'InteractiveWaypoint'):
         """Handle waypoint removal from node manager"""
