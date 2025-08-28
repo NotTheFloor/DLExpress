@@ -53,6 +53,61 @@ class BaseWFNodeObject:
 
         self.graphicsItem: Optional[QGraphicsItem] = None
 
+
+class WorkflowStatusLine(QObject):
+    """Represents a selectable status line within a workflow"""
+    
+    def __init__(self, workflow: 'WFWorkflow', status_key: str, status_title: str, text_item, position_info: Tuple[float, float, float], parent=None):
+        super().__init__(parent)
+        
+        self.workflow = workflow  # Parent WFWorkflow
+        self.status_key = str(status_key).upper() if status_key else None
+        self.status_title = status_title
+        self.text_item = text_item  # QGraphicsTextItem
+        self.position_info = position_info  # (x, y, height)
+        self._selection_manager = None
+        self._is_selected = False
+        
+        # Store original text color for selection feedback
+        self._original_color = self.text_item.defaultTextColor()
+        
+    def set_selection_manager(self, selection_manager):
+        """Set the selection manager for this status line"""
+        self._selection_manager = selection_manager
+    
+    def handle_click(self, has_modifier: bool = False):
+        """Handle status line click - select this status line"""
+        if self._selection_manager:
+            self._selection_manager.select_item(self, with_modifier=has_modifier)
+    
+    def set_selected(self, selected: bool):
+        """Set visual selection state"""
+        from workflow_designer.wfd_selection_manager import ThemeDetector
+        
+        self._is_selected = selected
+        if selected:
+            # Highlight the text in selection color
+            selection_color = ThemeDetector.get_selection_color()
+            self.text_item.setDefaultTextColor(selection_color)
+        else:
+            # Restore original color
+            self.text_item.setDefaultTextColor(self._original_color)
+    
+    def is_selected(self) -> bool:
+        """Check if this status line is selected"""
+        return self._is_selected
+    
+    def get_bounding_rect_in_workflow(self):
+        """Get the bounding rectangle of this status line in workflow coordinates"""
+        return self.text_item.boundingRect().translated(self.text_item.pos())
+    
+    def __str__(self):
+        return f"WorkflowStatusLine(title='{self.status_title}', key='{self.status_key}')"
+    
+    def __repr__(self):
+        return self.__str__()
+
+
 class WFEntity:
     def __init__(self, entityKey, entityType):
         self.entityKey = entityKey
@@ -115,6 +170,7 @@ class WFWorkflow(WFEntity):
         self.statuses = statuses
         self.statusObjects = statusObjects or []  # Full status objects with keys
         self.status_positions = {}  # Maps statusKey -> (x, y, height)
+        self.status_lines = []  # WorkflowStatusLine objects for selection
 
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeRect(rect, fillColor=fillColor, drawColor=drawColor)
@@ -142,6 +198,7 @@ class WFWorkflow(WFEntity):
             self.textItems.append(statusItem)
             
             # Map status key to position if we have status objects
+            status_key = None
             if i < len(self.statusObjects):
                 status_obj = self.statusObjects[i]
                 # Get status key from WorkflowActivity object
@@ -149,9 +206,81 @@ class WFWorkflow(WFEntity):
                 if status_key:
                     text_height = statusItem.boundingRect().height()
                     self.status_positions[str(status_key).upper()] = (DEF_ITM_X_PAD, y_pos, text_height)
+            
+            # Create WorkflowStatusLine object for this status
+            status_line_obj = WorkflowStatusLine(
+                workflow=self,
+                status_key=status_key,
+                status_title=statusLine,
+                text_item=statusItem,
+                position_info=(DEF_ITM_X_PAD, y_pos, statusItem.boundingRect().height())
+            )
+            self.status_lines.append(status_line_obj)
 
         self.shape.graphicsItem.setZValue(0)
         titleItem.setZValue(2)
+        
+        # Override click handling to support status line selection
+        self._setup_smart_click_handling()
+    
+    def _setup_smart_click_handling(self):
+        """Override the workflow's click handling to distinguish between status lines and workflow background"""
+        if not self.shape or not self.shape.graphicsItem:
+            return
+            
+        # Store original mouse press event
+        original_mouse_press = self.shape.graphicsItem.mousePressEvent
+        
+        def smart_mouse_press(event):
+            from PySide6.QtCore import Qt
+            if event.button() == Qt.LeftButton:
+                # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
+                modifiers = event.modifiers()
+                has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
+                
+                # Get click position relative to workflow
+                local_pos = event.pos()
+                
+                # Check if click is on a status line
+                clicked_status_line = self._find_status_line_at_position(local_pos)
+                
+                if clicked_status_line:
+                    # Click on status line - select the status line and stop event propagation
+                    clicked_status_line.handle_click(has_modifier)
+                    # Don't call original handler - this prevents workflow selection from firing
+                    return
+                else:
+                    # Click on workflow background - select the workflow
+                    self._handle_click(has_modifier)
+            
+            # Only call original handler if we didn't handle a status line click
+            original_mouse_press(event)
+            
+        self.shape.graphicsItem.mousePressEvent = smart_mouse_press
+    
+    def _find_status_line_at_position(self, local_pos) -> Optional['WorkflowStatusLine']:
+        """Find which status line (if any) was clicked at the given local position"""
+        for status_line in self.status_lines:
+            # Get the bounding rectangle of the status text item
+            text_rect = status_line.text_item.boundingRect()
+            text_pos = status_line.text_item.pos()
+            
+            # Create the absolute rectangle for the status text
+            absolute_rect = text_rect.translated(text_pos)
+
+            # Check if click position is within this status line's text area
+            if absolute_rect.contains(local_pos):
+                return status_line
+        
+        return None
+    
+    def set_selection_manager(self, selection_manager):
+        """Set the selection manager for this workflow and all its status lines"""
+        super().set_selection_manager(selection_manager)
+        
+        # Set selection manager for all status lines
+        for status_line in self.status_lines:
+            status_line.set_selection_manager(selection_manager)
         
     def getStatusLineAttachmentPoint(self, statusKey: str) -> Optional[Tuple[float, float]]:
         """Get line attachment point for specific status within this workflow"""

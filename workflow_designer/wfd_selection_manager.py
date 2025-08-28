@@ -141,8 +141,11 @@ class SelectionManager(QObject):
     
     def _apply_selection(self, item: object):
         """Apply visual selection to an item"""
+        # Check if it's a status line (WorkflowStatusLine)
+        if hasattr(item, 'set_selected') and hasattr(item, 'workflow'):
+            item.set_selected(True)
         # Check if it's an entity (WFEntity)
-        if hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
+        elif hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
             item.shape.setSelected(True, self.selection_color)
         # Check if it's a line group (WFLineGroup) or arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
@@ -161,8 +164,11 @@ class SelectionManager(QObject):
     
     def _deselect_item(self, item: object):
         """Remove visual selection from a specific item"""
+        # Check if it's a status line (WorkflowStatusLine)
+        if hasattr(item, 'set_selected') and hasattr(item, 'workflow'):
+            item.set_selected(False)
         # Check if it's an entity (WFEntity)
-        if hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
+        elif hasattr(item, 'shape') and hasattr(item.shape, 'setSelected'):
             item.shape.setSelected(False, self.selection_color)
         # Check if it's a line group (WFLineGroup) or arrow (SmartArrow or MultiSegmentArrow)
         elif hasattr(item, 'setSelected'):
@@ -191,6 +197,9 @@ class SelectionManager(QObject):
                 
     def _get_item_type(self, item: object) -> str:
         """Determine the type of an item for selection rules"""
+        # Check if it's a status line (WorkflowStatusLine)
+        if hasattr(item, 'set_selected') and hasattr(item, 'workflow'):
+            return "STATUS_LINE"
         # Check if it's a line/arrow
         from workflow_designer.wfd_scene import WFLineGroup
         if isinstance(item, WFLineGroup) or hasattr(item, 'setSelected') and hasattr(item, 'show_nodes'):
@@ -215,11 +224,15 @@ class SelectionManager(QObject):
         # Separate items by type
         entities = {item for item in items if self._get_item_type(item) == "ENTITY"}
         lines = {item for item in items if self._get_item_type(item) == "LINE"}
+        status_lines = {item for item in items if self._get_item_type(item) == "STATUS_LINE"}
         
-        # Priority rule: Entities take precedence over lines in box selection
+        # Priority rule: Entities take precedence over status lines, status lines over lines
         if entities:
             selected_items = entities
             selected_type = "ENTITY"
+        elif status_lines:
+            selected_items = status_lines
+            selected_type = "STATUS_LINE"
         elif lines:
             selected_items = lines  
             selected_type = "LINE"
