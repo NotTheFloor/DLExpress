@@ -355,6 +355,9 @@ class DrawingWidget(QFrame):
             # Set the WFScene reference if available
             if self.currentWorkflow in self.sceneManagerDict:
                 self.view.set_wf_scene(self.sceneManagerDict[self.currentWorkflow])
+        
+        # Set up context menu functionality
+        self._setup_context_menu()
     
     def _get_current_scene_item_count(self) -> int:
         """Get the number of items in the current scene for performance optimization"""
@@ -471,3 +474,134 @@ class DrawingWidget(QFrame):
                         currentScene["linkPoints"][i][0], 
                         currentScene["linkPoints"][i][1]
                         )
+    
+    def _setup_context_menu(self):
+        """Set up context menu functionality for the graphics view"""
+        from workflow_designer.wfd_context_menu import setup_context_menu_for_widget
+        
+        def get_current_scene():
+            """Get the current WFScene"""
+            if self.currentWorkflow and self.currentWorkflow in self.sceneManagerDict:
+                return self.sceneManagerDict[self.currentWorkflow]
+            return None
+        
+        def map_position_to_scene(widget_pos):
+            """Map widget position to scene coordinates"""
+            try:
+                scene_pos = self.view.mapToScene(widget_pos)
+                x, y = scene_pos.x(), scene_pos.y()
+                
+                # Validate that coordinates are valid numbers
+                if x is None or y is None or not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                    logger.error(f"Invalid scene coordinates: x={x}, y={y} from widget_pos={widget_pos}")
+                    return (100.0, 100.0)  # Fallback position
+                
+                return (float(x), float(y))
+            except Exception as e:
+                logger.error(f"Error mapping widget position to scene: {e}")
+                return (100.0, 100.0)  # Fallback position
+        
+        # Set up context menu handler
+        self.context_menu_handler = setup_context_menu_for_widget(
+            self.view,
+            get_current_scene,
+            map_position_to_scene
+        )
+        
+        # Connect context menu signals to our handlers
+        self.context_menu_handler.add_status_requested.connect(self._handle_add_status_request)
+        self.context_menu_handler.add_workflow_requested.connect(self._handle_add_workflow_request)
+        
+        logger.debug("Context menu functionality set up for drawing widget")
+    
+    def _handle_add_status_request(self, position, default_title):
+        """Handle request to add a new status"""
+        from workflow_designer.wfd_context_menu import SimpleStatusInputDialog
+        
+        # Get status title from user
+        title = SimpleStatusInputDialog.get_status_title(self, default_title)
+        if not title:
+            return  # User cancelled
+        
+        # Get current scene
+        wf_scene = self._get_current_wf_scene()
+        if not wf_scene:
+            logger.error("No current WFScene available for adding status")
+            return
+        
+        try:
+            # Add the status to the scene
+            print(f"DEBUG *** position: {position}")
+            new_status = wf_scene.add_new_status_visual(position, title)
+            print("here")
+            # Refresh the graphics scene to show the new status
+            self._refresh_graphics_scene(wf_scene)
+            
+            logger.info(f"Added new status '{title}' at position {position}")
+            
+        except Exception as e:
+            logger.error(f"Failed to add new status: {e}")
+            self._show_error_message("Add Status Error", f"Failed to add new status: {str(e)}")
+    
+    def _handle_add_workflow_request(self, position):
+        """Handle request to add an existing workflow"""
+        from workflow_designer.wfd_workflow_selector import select_workflow_for_scene
+        
+        # Get current scene
+        wf_scene = self._get_current_wf_scene()
+        if not wf_scene:
+            logger.error("No current WFScene available for adding workflow")
+            return
+        
+        # Show workflow selection dialog
+        selected_workflow = select_workflow_for_scene(
+            wf_scene.sceneManager,
+            self.currentWorkflow,
+            self
+        )
+        
+        if not selected_workflow:
+            return  # User cancelled
+        
+        try:
+            # Add the workflow to the scene
+            new_workflow = wf_scene.add_existing_workflow_visual(
+                position, 
+                selected_workflow['WorkflowKey']
+            )
+            
+            # Refresh the graphics scene to show the new workflow
+            self._refresh_graphics_scene(wf_scene)
+            
+            logger.info(f"Added workflow '{selected_workflow['Title']}' at position {position}")
+            
+        except Exception as e:
+            logger.error(f"Failed to add existing workflow: {e}")
+            self._show_error_message("Add Workflow Error", f"Failed to add workflow: {str(e)}")
+    
+    def _get_current_wf_scene(self):
+        """Get the current WFScene object"""
+        if self.currentWorkflow and self.currentWorkflow in self.sceneManagerDict:
+            return self.sceneManagerDict[self.currentWorkflow]
+        return None
+    
+    def _refresh_graphics_scene(self, wf_scene):
+        """Refresh the Qt graphics scene to reflect changes in WFScene"""
+        if not self.currentWorkflow or self.currentWorkflow not in self.sceneDict:
+            return
+        
+        # TODO: Implement proper graphics scene refresh
+        # For now, we'll log that a refresh is needed
+        logger.debug("Graphics scene refresh needed - newly added entities may not be visible until scene is rebuilt")
+        
+        # This is a placeholder - in a full implementation, you would:
+        # 1. Clear the current Qt graphics scene
+        # 2. Rebuild it from the WFScene entities
+        # 3. Or implement incremental updates to add just the new entities
+    
+    def _show_error_message(self, title, message):
+        """Show an error message to the user"""
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg_box = QMessageBox(QMessageBox.Critical, title, message, parent=self)
+        msg_box.exec()

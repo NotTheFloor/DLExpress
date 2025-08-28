@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem, QGraphics
 if TYPE_CHECKING:
     from workflow_designer.wfd_utilities import MultiSegmentArrow
 
+from .wfd_logger import logger
+
 @dataclass
 class InteractiveWaypoint:
     """Represents a waypoint in a line that can be moved by the user"""
@@ -38,9 +40,9 @@ class InteractiveWaypoint:
             if not (math.isnan(x) or math.isnan(y) or abs(x) > 100000 or abs(y) > 100000):
                 self.position = new_position
             else:
-                print(f"Warning: Invalid waypoint position rejected: {new_position}")
+                logger.warning(f"Warning: Invalid waypoint position rejected: {new_position}")
         else:
-            print(f"Warning: Invalid position format rejected: {new_position}")
+            logger.warning(f"Warning: Invalid position format rejected: {new_position}")
     
     def distance_to(self, point: Tuple[float, float]) -> float:
         """Calculate distance to another point"""
@@ -71,12 +73,12 @@ class WaypointNode(QGraphicsEllipseItem):
         # Set position with validation
         x, y = waypoint.x, waypoint.y
         if math.isnan(x) or math.isnan(y):
-            print(f"Warning: WaypointNode has NaN coordinates: ({x}, {y}) for waypoint {waypoint.node_id}")
+            logger.warning(f"Warning: WaypointNode has NaN coordinates: ({x}, {y}) for waypoint {waypoint.node_id}")
             # Use a fallback position
             x, y = 50, 50
             waypoint.move_to((x, y))
         elif (x == 0 and y == 0):
-            print(f"Warning: WaypointNode created at origin (0,0) for waypoint {waypoint.node_id}")
+            logger.warning(f"Warning: WaypointNode created at origin (0,0) for waypoint {waypoint.node_id}")
             # This might be legitimate, but worth noting
         
         self.setPos(x, y)
@@ -120,8 +122,6 @@ class WaypointNode(QGraphicsEllipseItem):
         super().hoverLeaveEvent(event)
     
     def mousePressEvent(self, event):
-        print(f"*************DOWN")
-        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton:
             self.is_dragging = True
             self.drag_start_pos = self.pos()
@@ -135,21 +135,11 @@ class WaypointNode(QGraphicsEllipseItem):
             # DEBUG: Log coordinate state at press  
             import time
             time_since_creation = time.time() - self.creation_timestamp if self.creation_timestamp else 0
-            #print(f"\n🔴 STARTING DRAG SESSION {self.drag_session_count}: Node {self.waypoint.node_id[:8]}... created {time_since_creation:.2f}s ago")
-            #self._log_coordinate_state("MOUSE_PRESS", event)
         super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
         if self.is_dragging:
             self.move_count += 1
-
-            
-            print(f"*************")
-            print(len(self.scene().items()))
-            
-            # DEBUG: Enhanced logging for critical moves to verify fix
-            #if self.move_count <= 3:
-                #self._log_coordinate_state(f"WAYPOINT_MOVE_{self.move_count}_FIXED", event)
             
             # COORDINATE FIX: Use event.scenePos() instead of self.pos() to avoid Qt coordinate corruption
             scene_pos = event.scenePos()
@@ -166,34 +156,20 @@ class WaypointNode(QGraphicsEllipseItem):
     
     def mouseReleaseEvent(self, event):
 
-        print(f"*************UP")
-        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton and self.is_dragging:
             self.is_dragging = False
             self.setPen(self._hover_pen)
             self.setBrush(self._hover_brush)
             
-            # DEBUG: Log coordinate state at release
-            #print(f"🔵 ENDING DRAG SESSION {self.drag_session_count} after {self.move_count} moves")
-            #self._log_coordinate_state("MOUSE_RELEASE", event)
-            
-            #print(f"🟡 CALLING on_waypoint_drag_finished - watch for position changes...")
-            # Final update and check for merges
             self.node_manager.on_waypoint_drag_finished(self.waypoint)
             
-            #print(f"🟢 FINISHED on_waypoint_drag_finished - checking final state...")
-            #self._log_coordinate_state("POST_DRAG_FINISHED")
         super().mouseReleaseEvent(event)
     
     def update_position(self, new_pos: Tuple[float, float]):
         """Update visual position to match waypoint position"""
-        #print(f"🔶 EXTERNAL POSITION UPDATE: Node {self.waypoint.node_id[:8]}... being moved to {new_pos}")
         self.setPos(new_pos[0], new_pos[1])
         self.waypoint.position = new_pos
         
-        # DEBUG: Log position update
-        #self._log_coordinate_state("EXTERNAL_UPDATE_POSITION")
-    
     def set_selection_color(self, color: QColor):
         """Update colors based on current theme"""
         self._drag_pen = QPen(color, 2)
@@ -201,10 +177,6 @@ class WaypointNode(QGraphicsEllipseItem):
     
     def _log_coordinate_state(self, event_name: str, event=None):
         """Enhanced coordinate system debugging for round 2"""
-        print(f"\n==== ENHANCED COORDINATE DEBUG: {event_name} ====")
-        print(f"Node: {self.waypoint.node_id[:8]}... (drag session #{self.drag_session_count}, move #{self.move_count})")
-        print(f"Waypoint is_user_created: {self.waypoint.is_user_created}")
-        print(f"is_dragging: {self.is_dragging}")
         
         # Current coordinates
         item_pos = self.pos()
@@ -321,8 +293,6 @@ class MidpointNode(QGraphicsRectItem):
     
     def mousePressEvent(self, event):
 
-        print(f"*************UPDOWN")
-        print(len(self.scene().items()))
         if event.button() == Qt.LeftButton:
             self.is_dragging = True
             self.setPen(self._drag_pen)
@@ -337,8 +307,6 @@ class MidpointNode(QGraphicsRectItem):
     def mouseMoveEvent(self, event):
         if self.is_dragging:
 
-            print(f"*************")
-            print(len(self.scene().items()))
             self.has_been_dragged = True
             
             # COORDINATE FIX: Use event.scenePos() instead of self.pos() to avoid Qt coordinate corruption
@@ -356,8 +324,6 @@ class MidpointNode(QGraphicsRectItem):
     
     def mouseReleaseEvent(self, event):
 
-        print(f"*************UPUP")
-        print(len(self.scene().items()))
         self.node_manager._scene = self.scene()
         if event.button() == Qt.LeftButton and self.is_dragging:
             self.is_dragging = False
@@ -421,12 +387,11 @@ class LineNodeManager(QObject):
         for waypoint in waypoints:
             # Additional validation per waypoint
             if self._is_valid_waypoint(waypoint):
-                print(f"Creating WaypointNode for waypoint {waypoint.node_id[:8]}... (user_created: {waypoint.is_user_created})")
                 node = WaypointNode(waypoint, self)
                 node.set_selection_color(self.selection_color)
                 self.waypoint_nodes.append(node)
             else:
-                print(f"Warning: Skipping invalid waypoint {waypoint.node_id} at ({waypoint.x}, {waypoint.y})")
+                logger.warning(f"Warning: Skipping invalid waypoint {waypoint.node_id} at ({waypoint.x}, {waypoint.y})")
         
         # Create midpoint nodes between segments
         self._create_midpoint_nodes(waypoints)
@@ -465,7 +430,7 @@ class LineNodeManager(QObject):
         
         # Validate path points before creating midpoint nodes
         if not path_points or len(path_points) < 2:
-            print(f"Warning: Invalid path points for midpoint creation: {path_points}")
+            logger.warning(f"Warning: Invalid path points for midpoint creation: {path_points}")
             return
         
         # Create midpoint nodes for each segment (even with 0 waypoints, we have 1 segment)
@@ -476,7 +441,7 @@ class LineNodeManager(QObject):
             # Validate individual points
             if not (start_point and end_point and 
                     len(start_point) == 2 and len(end_point) == 2):
-                print(f"Warning: Invalid segment points {i}: start={start_point}, end={end_point}")
+                logger.warning(f"Warning: Invalid segment points {i}: start={start_point}, end={end_point}")
                 continue
                 
             # Calculate midpoint
@@ -487,7 +452,7 @@ class LineNodeManager(QObject):
             
             # Validate calculated midpoint
             if math.isnan(midpoint[0]) or math.isnan(midpoint[1]) or (midpoint[0] == 0 and midpoint[1] == 0):
-                print(f"Warning: Suspicious midpoint calculated for segment {i}: {midpoint} from {start_point} to {end_point}")
+                logger.warning(f"Warning: Suspicious midpoint calculated for segment {i}: {midpoint} from {start_point} to {end_point}")
                 # Use a safe fallback position slightly offset from start point
                 midpoint = (start_point[0] + 1, start_point[1] + 1)
             
@@ -567,20 +532,6 @@ class LineNodeManager(QObject):
                 print("Warning: Could not get line group for undo command")
                 return
                 
-            """
-            scene = None
-            # Try to get scene from source entity
-            if hasattr(line_group.srcEntity, '_selection_manager'):
-                selection_manager = line_group.srcEntity._selection_manager
-                # Find scene by looking for objects that have this selection manager
-                # This is a bit hacky but works with the current architecture
-                for attr_name in dir(selection_manager):
-                    attr = getattr(selection_manager, attr_name)
-                    if hasattr(attr, 'lines') and line_group in attr.lines:
-                        scene = attr
-                        break
-            """
-                        
             scene = self.scene()
             if not scene:
                 print("Warning: Could not find scene for undo command")
@@ -604,7 +555,7 @@ class LineNodeManager(QObject):
             print(f"Created waypoint move command for {moved_waypoint.node_id}")
             """
         except Exception as e:
-            print(f"Error creating waypoint move command: {e}")
+            logger.error(f"Error creating waypoint move command: {e}")
             import traceback
             traceback.print_exc()
 
@@ -684,10 +635,10 @@ class LineNodeManager(QObject):
             # Recreate all nodes with new waypoint structure
             self.create_nodes(current_waypoints)
             
-            print(f"Recreated nodes after split: {len(current_waypoints)} waypoints")
+            logger.debug(f"Recreated nodes after split: {len(current_waypoints)} waypoints")
             
         except Exception as e:
-            print(f"Error recreating nodes after split: {e}")
+            logger.error(f"Error recreating nodes after split: {e}")
             
     def _fallback_split_segment(self, segment_index: int, position: Tuple[float, float]):
         """Fallback segment split method (original implementation)"""
@@ -725,7 +676,7 @@ class LineNodeManager(QObject):
         # Note: create_nodes() already calls _add_nodes_to_scene() internally
         
         # Restore positions for nodes that weren't removed
-        print(f"Split complete: restoring {len(current_node_positions)} waypoint positions and {len(current_midpoint_positions)} midpoint positions")
+        logger.debug(f"Split complete: restoring {len(current_node_positions)} waypoint positions and {len(current_midpoint_positions)} midpoint positions")
         self._restore_node_positions(current_node_positions)
         
         # Restore positions for remaining midpoint nodes with adjusted indices
@@ -803,7 +754,7 @@ class LineNodeManager(QObject):
                     # Allow merging of both user-created AND XML waypoints when they're straightened
                     # This enables XML-loaded lines to be simplified when manually straightened
                     points_to_remove.append(waypoint_to_remove)
-                    print(f"Merging waypoint {waypoint_to_remove.node_id[:8]}... (user_created: {waypoint_to_remove.is_user_created})")
+                    logger.debug(f"Merging waypoint {waypoint_to_remove.node_id[:8]}... (user_created: {waypoint_to_remove.is_user_created})")
         
         # Remove waypoints and recreate nodes
         for waypoint in points_to_remove:
@@ -818,9 +769,9 @@ class LineNodeManager(QObject):
             
             # Recreate nodes after removal
             remaining_waypoints = self.arrow.get_interactive_waypoints()
-            print(f"Recreating nodes after merge check: {len(remaining_waypoints)} waypoints")
+            logger.debug(f"Recreating nodes after merge check: {len(remaining_waypoints)} waypoints")
             for i, wp in enumerate(remaining_waypoints):
-                print(f"  Waypoint {i}: {wp.node_id} at ({wp.x:.1f}, {wp.y:.1f})")
+                logger.debug(f"  Waypoint {i}: {wp.node_id} at ({wp.x:.1f}, {wp.y:.1f})")
             
             self.create_nodes(remaining_waypoints)
             
@@ -829,12 +780,12 @@ class LineNodeManager(QObject):
     
     def _restore_node_positions(self, saved_positions: dict):
         """Restore node positions from saved positions to prevent (0,0) corruption"""
-        print(f"_restore_node_positions: {len(saved_positions)} saved positions, {len(self.waypoint_nodes)} current nodes")
+        logger.debug(f"_restore_node_positions: {len(saved_positions)} saved positions, {len(self.waypoint_nodes)} current nodes")
         for node in self.waypoint_nodes:
             if node.waypoint and node.waypoint.node_id in saved_positions:
                 saved_pos = saved_positions[node.waypoint.node_id]
                 current_pos = (node.pos().x(), node.pos().y())
-                print(f"  Node {node.waypoint.node_id}: current=({current_pos[0]:.1f}, {current_pos[1]:.1f}), saved={saved_pos}")
+                logger.debug(f"  Node {node.waypoint.node_id}: current=({current_pos[0]:.1f}, {current_pos[1]:.1f}), saved={saved_pos}")
                 
                 # Validate the saved position before applying
                 if saved_pos and len(saved_pos) == 2:
@@ -842,17 +793,17 @@ class LineNodeManager(QObject):
                     if not (math.isnan(x) or math.isnan(y) or (x == 0 and y == 0)):
                         node.setPos(x, y)
                         node.waypoint.move_to(saved_pos)
-                        print(f"    Restored position for waypoint {node.waypoint.node_id}: {saved_pos}")
+                        logger.debug(f"    Restored position for waypoint {node.waypoint.node_id}: {saved_pos}")
                         
                         # DEBUG: Log coordinate state after restoration
                         #node._log_coordinate_state("POSITION_RESTORED")
                     else:
-                        print(f"    Warning: Invalid saved position for waypoint {node.waypoint.node_id}: {saved_pos}")
+                        logger.warning(f"    Warning: Invalid saved position for waypoint {node.waypoint.node_id}: {saved_pos}")
                 else:
-                    print(f"    Warning: Invalid saved position format for waypoint {node.waypoint.node_id}: {saved_pos}")
+                    logger.warning(f"    Warning: Invalid saved position format for waypoint {node.waypoint.node_id}: {saved_pos}")
             else:
                 current_pos = (node.pos().x(), node.pos().y())
-                print(f"  Node {node.waypoint.node_id}: current=({current_pos[0]:.1f}, {current_pos[1]:.1f}), no saved position")
+                logger.debug(f"  Node {node.waypoint.node_id}: current=({current_pos[0]:.1f}, {current_pos[1]:.1f}), no saved position")
     
     def _restore_midpoint_positions(self, saved_midpoint_positions: dict, split_segment_index: int):
         """Restore midpoint node positions after segment splitting with index adjustment"""
@@ -872,9 +823,9 @@ class LineNodeManager(QObject):
                     if not (math.isnan(x) or math.isnan(y) or (x == 0 and y == 0)):
                         node.setPos(x, y)
                         node.midpoint = saved_pos
-                        print(f"Restored midpoint {old_index}→{new_index} position: {saved_pos}")
+                        logger.debug(f"Restored midpoint {old_index}→{new_index} position: {saved_pos}")
                     else:
-                        print(f"Warning: Invalid saved midpoint position {old_index}→{new_index}: {saved_pos}")
+                        logger.warning(f"Warning: Invalid saved midpoint position {old_index}→{new_index}: {saved_pos}")
     
     def _find_waypoint_by_position(self, waypoints: List[InteractiveWaypoint], target_position: Tuple[float, float]) -> Optional[InteractiveWaypoint]:
         """Find waypoint that matches the target position with improved tolerance and validation"""
@@ -896,7 +847,7 @@ class LineNodeManager(QObject):
                     best_match = waypoint
                     
             except Exception as e:
-                print(f"Warning: Error calculating distance for waypoint {waypoint.node_id}: {e}")
+                logger.warning(f"Warning: Error calculating distance for waypoint {waypoint.node_id}: {e}")
                 continue
         
         return best_match
@@ -925,11 +876,11 @@ class LineNodeManager(QObject):
     
     def _remove_all_waypoints(self, waypoints: List[InteractiveWaypoint]):
         """Remove all waypoints to create a direct line (used when entire line is straight)"""
-        print(f"Removing all {len(waypoints)} waypoints - line is completely straight")
+        logger.debug(f"Removing all {len(waypoints)} waypoints - line is completely straight")
         
         # Store current positions before removal for debugging
         for waypoint in waypoints:
-            print(f"  Removing waypoint {waypoint.node_id} at ({waypoint.x}, {waypoint.y}), is_user_created: {waypoint.is_user_created}")
+            logger.debug(f"  Removing waypoint {waypoint.node_id} at ({waypoint.x}, {waypoint.y}), is_user_created: {waypoint.is_user_created}")
         
         # Remove all waypoints (including XML ones)
         for waypoint in waypoints:
@@ -940,11 +891,11 @@ class LineNodeManager(QObject):
     
     def _validate_waypoints(self, waypoints: List[InteractiveWaypoint]):
         """Validate waypoint list for common issues"""
-        print(f"Validating {len(waypoints)} waypoints...")
+        logger.debug(f"Validating {len(waypoints)} waypoints...")
         
         for i, waypoint in enumerate(waypoints):
             if not self._is_valid_waypoint(waypoint):
-                print(f"  Issue with waypoint {i}: {waypoint.node_id} at ({waypoint.x}, {waypoint.y})")
+                logger.warning(f"  Issue with waypoint {i}: {waypoint.node_id} at ({waypoint.x}, {waypoint.y})")
     
     def _is_valid_waypoint(self, waypoint: InteractiveWaypoint) -> bool:
         """Check if a waypoint has valid coordinates and data"""
@@ -969,7 +920,7 @@ class LineNodeManager(QObject):
             return True
             
         except Exception as e:
-            print(f"Error validating waypoint: {e}")
+            logger.error(f"Error validating waypoint: {e}")
             return False
     
     def _validate_created_nodes(self):
@@ -982,10 +933,10 @@ class LineNodeManager(QObject):
                 suspicious_nodes.append(node)
                 
         if suspicious_nodes:
-            print(f"Warning: Found {len(suspicious_nodes)} nodes with suspicious positions:")
+            logger.warning(f"Warning: Found {len(suspicious_nodes)} nodes with suspicious positions:")
             for node in suspicious_nodes:
                 pos = node.pos()
-                print(f"  Node {node.waypoint.node_id} at ({pos.x()}, {pos.y()})")
+                logger.warning(f"  Node {node.waypoint.node_id} at ({pos.x()}, {pos.y()})")
     
     def _should_merge_points(self, p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]) -> bool:
         """Determine if three points are straight enough to merge"""

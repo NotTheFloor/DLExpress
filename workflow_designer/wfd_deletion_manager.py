@@ -352,8 +352,6 @@ class DeletionManager:
             if hasattr(line, 'get_all_graphics_items'):
                 # Use the method from WFLineGroup to get all items
                 all_items = line.get_all_graphics_items()
-                print("r---")
-                print(len(all_items))
             else:
                 # Fallback to lineSegments
                 all_items = line.lineSegments
@@ -363,21 +361,12 @@ class DeletionManager:
                     # Handle both wrapped objects and raw Qt items
                     graphics_item = item.graphicsItem if hasattr(item, 'graphicsItem') else item
 
-                    print(type(item))
-                    
-                    print(type(graphics_item))
                     
                     if graphics_item and graphics_item.scene() == self.qt_graphics_scene:
                         self.qt_graphics_scene.removeItem(graphics_item)
                         logger.debug(f"Removed line graphics item")
                     else:
-                        logger.error("How the fuck you just going to ignore this???")
-                        if hasattr(item, 'graphicsItem'):
-                            logger.error("The pain")
-                        if graphics_item:
-                            logger.error("Hot damn")
-                            if graphics_item.scene():
-                                logger.error("Goodness gracious")
+                        logger.error("Graphics item does not have a valid scene or is not valid during _removeLineGraphicsItems")
                         
                 except Exception as item_error:
                     logger.error(f"Error removing individual line item: {item_error}")

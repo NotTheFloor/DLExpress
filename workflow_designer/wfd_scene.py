@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TypedDict, TYPE_CHECKING, Tuple
+from typing import Optional, TypedDict, TYPE_CHECKING, Tuple, Dict, Any
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
@@ -419,7 +419,215 @@ class WFScene(QObject):
             line.set_selection_manager(self.selection_manager)
 
     def _selectionChanged(self, selectionSet: set):
-        self.sceneSelectionChanged.emit(self.sceneWorkflow.WorkflowKey, selectionSet) 
+        self.sceneSelectionChanged.emit(self.sceneWorkflow.WorkflowKey, selectionSet)
+
+    def add_new_status_visual(self, position: tuple[float, float], title: str = "New Status") -> WFStatus:
+        """
+        Add a new status entity to the scene visually and update XML.
+        
+        Args:
+            position: (x, y) position tuple for the new status
+            title: Title for the new status
+            
+        Returns:
+            Created WFStatus entity
+        """
+        from workflow_designer.wfd_entity_factory import create_status_at_position
+        from workflow_designer.wfd_xml_builder import add_node_to_xml_string
+        
+        # Create status data using entity factory
+        status_data = create_status_at_position(
+            x=position[0],
+            y=position[1], 
+            title=title,
+            workflow_key=str(self.sceneWorkflow.WorkflowKey)
+        )
+        
+        # Convert data dict to WFStatus entity
+        status_entity = self._create_status_entity_from_data(status_data)
+        
+        # Add to scene collections
+        self.statuses.append(status_entity)
+        status_entity.set_selection_manager(self.selection_manager)
+        
+        # Update the XML representation
+        try:
+            updated_xml = add_node_to_xml_string(self.dlPlacement.LayoutData, status_data)
+            self.dlPlacement.LayoutData = updated_xml
+            logger.debug(f"Added new status '{title}' at position {position}")
+        except Exception as e:
+            logger.error(f"Failed to update XML for new status: {e}")
+            self.statuses.remove(status_entity)
+            raise
+        
+        # Placeholder for database persistence
+        self.save_new_status_to_database(status_data)
+        
+        return status_entity
+    
+    def add_existing_workflow_visual(self, position: tuple[float, float], workflow_key: str) -> WFWorkflow:
+        """
+        Add an existing workflow as a visual entity to the scene.
+        
+        Args:
+            position: (x, y) position tuple for the workflow
+            workflow_key: Key of the existing workflow to add
+            
+        Returns:
+            Created WFWorkflow entity
+        """
+        from workflow_designer.wfd_entity_factory import create_workflow_at_position
+        from workflow_designer.wfd_xml_builder import add_node_to_xml_string
+        
+        # Get workflow info from scene manager
+        workflow_info = self._get_workflow_info_by_key(workflow_key)
+        if not workflow_info:
+            raise ValueError(f"Workflow with key {workflow_key} not found")
+        
+        # Create workflow data using entity factory
+        workflow_data = create_workflow_at_position(
+            x=position[0],
+            y=position[1],
+            workflow_info=workflow_info
+        )
+        
+        # Convert data dict to WFWorkflow entity
+        workflow_entity = self._create_workflow_entity_from_data(workflow_data, workflow_info)
+        
+        # Add to scene collections
+        self.workflows.append(workflow_entity)
+        workflow_entity.set_selection_manager(self.selection_manager)
+        
+        # Update the XML representation
+        try:
+            updated_xml = add_node_to_xml_string(self.dlPlacement.LayoutData, workflow_data)
+            self.dlPlacement.LayoutData = updated_xml
+            logger.debug(f"Added existing workflow '{workflow_info['Title']}' at position {position}")
+        except Exception as e:
+            logger.error(f"Failed to update XML for existing workflow: {e}")
+            self.workflows.remove(workflow_entity)
+            raise
+        
+        # Placeholder for database persistence
+        self.save_layout_to_database()
+        
+        return workflow_entity
+    
+    def _create_status_entity_from_data(self, status_data: Dict[str, Any]) -> WFStatus:
+        """Convert status data dictionary to WFStatus entity"""
+        # Create position rect
+        pos = status_data["position"]
+        rect = Rect(pos["x"], pos["y"], pos["width"], pos["height"])
+        
+        # Create font
+        font_data = status_data["font"]
+        
+        # Validate font data before creating WFDFont object
+        if not font_data:
+            logger.error("No font data provided for status")
+            font = DEFAULT_FONT
+        else:
+            size_value = font_data.get("Size", "8.25")
+            if size_value is None:
+                logger.error(f"Font size is None in status data: {font_data}")
+                size_value = "8.25"
+            
+            font = WFDFont(
+                font_data.get("Name", "Microsoft Sans Serif"),
+                float(size_value),
+                font_data.get("Bold", "True") == "True",
+                font_data.get("Italic", "False") == "True", 
+                font_data.get("Strikeout", "False") == "True",
+                font_data.get("Underline", "False") == "True"
+            )
+        
+        # Parse colors
+        fillColor = parseXmlColor(status_data["properties"].get("fill_color", "-1"))
+        drawColor = parseXmlColor(status_data["properties"].get("draw_color", "-16777216"))
+        
+        return WFStatus(
+            status_data["key"],
+            status_data["title"],
+            rect,
+            font,
+            fillColor=fillColor,
+            drawColor=drawColor
+        )
+    
+    def _create_workflow_entity_from_data(self, workflow_data: Dict[str, Any], workflow_info: Dict[str, Any]) -> WFWorkflow:
+        """Convert workflow data dictionary to WFWorkflow entity"""
+        # Create position rect
+        pos = workflow_data["position"] 
+        rect = Rect(pos["x"], pos["y"], pos["width"], pos["height"])
+        
+        # Create font
+        font_data = workflow_data["font"]
+        
+        # Validate font data before creating WFDFont object
+        if not font_data:
+            logger.error("No font data provided for workflow")
+            font = DEFAULT_FONT
+        else:
+            size_value = font_data.get("Size", "8.25")
+            if size_value is None:
+                logger.error(f"Font size is None in workflow data: {font_data}")
+                size_value = "8.25"
+            
+            font = WFDFont(
+                font_data.get("Name", "Microsoft Sans Serif"),
+                float(size_value),
+                font_data.get("Bold", "True") == "True",
+                font_data.get("Italic", "False") == "True",
+                font_data.get("Strikeout", "False") == "True", 
+                font_data.get("Underline", "False") == "True"
+            )
+        
+        # Get status sequence for this workflow
+        status_sequence = self.sceneManager.getStatusSequence(workflow_data["workflow_key"])
+        status_titles = [st.Title for st in status_sequence]
+        
+        # Parse colors
+        fillColor = parseXmlColor(workflow_data["properties"].get("fill_color", "-1"))
+        drawColor = parseXmlColor(workflow_data["properties"].get("draw_color", "-16777216"))
+        
+        return WFWorkflow(
+            workflow_data["key"],
+            workflow_data["title"],
+            status_titles,
+            rect,
+            font,
+            fillColor=fillColor,
+            drawColor=drawColor,
+            statusObjects=status_sequence
+        )
+    
+    def _get_workflow_info_by_key(self, workflow_key: str) -> Optional[Dict[str, Any]]:
+        """Get workflow information from scene manager by key"""
+        from doclink_py.models.doclink_type_utilities import get_object_from_list
+        
+        workflow = get_object_from_list(self.sceneManager.workflows, "WorkflowKey", workflow_key.upper())
+        if workflow:
+            return {
+                "Title": workflow.Title,
+                "WorkflowKey": str(workflow.WorkflowKey),
+                "WorkflowID": workflow.WorkflowID,
+                "Tooltip": workflow.Title
+            }
+        return None
+    
+    def save_new_status_to_database(self, status_data: Dict[str, Any]):
+        """
+        Placeholder method for saving new status to database.
+        To be implemented with proper database integration.
+        """
+        logger.info(f"TODO: Save new status '{status_data['title']}' to database")
+    
+    def save_layout_to_database(self):
+        """
+        Placeholder method for saving updated layout to database.
+        To be implemented with proper database integration.
+        """
+        logger.info("TODO: Save updated layout to database") 
 
 
 @dataclass
@@ -482,12 +690,24 @@ def convertWorkflowFromXML(node: Node, statuses: list[str], statusObjects: list 
         )
 
 def createFontFromWFDFont(wfdFont):
-    font = QFont(wfdFont.Name, int(round(float(wfdFont.Size))))
-    font.setBold(wfdFont.Bold=='True')
-    font.setItalic(wfdFont.Italic=='True')
-    font.setUnderline(wfdFont.Underline=='True')
-    font.setStrikeOut(wfdFont.Strikeout=='True')
-    return font
+    try:
+        # Validate font size
+        size_value = wfdFont.Size
+        if size_value is None:
+            logger.warning(f"WFDFont has None size, using default: {wfdFont}")
+            size_value = 8.25
+        
+        font = QFont(wfdFont.Name or "Microsoft Sans Serif", int(round(float(size_value))))
+        font.setBold(wfdFont.Bold=='True')
+        font.setItalic(wfdFont.Italic=='True')
+        font.setUnderline(wfdFont.Underline=='True')
+        font.setStrikeOut(wfdFont.Strikeout=='True')
+        return font
+    except (TypeError, ValueError) as e:
+        logger.error(f"Error creating font from WFDFont {wfdFont}: {e}")
+        # Return default font as fallback
+        default_font = QFont("Microsoft Sans Serif", 8)
+        return default_font
 
 def centerTextItem(textItem: QGraphicsTextItem, width, height):
     metrics = QFontMetrics(textItem.font())
@@ -500,6 +720,11 @@ def centerTextItem(textItem: QGraphicsTextItem, width, height):
 def parseXmlColor(colorStr: str) -> QColor:
     """Convert XML color string (like '-1', '-16777216') to QColor"""
     try:
+        # Handle None or empty values
+        if colorStr is None or colorStr == "":
+            logger.warning("parseXmlColor received None or empty string, using gray as fallback")
+            return QColor(Qt.gray)
+        
         colorInt = int(colorStr)
         if colorInt == -1:
             return QColor(Qt.white)
@@ -513,5 +738,6 @@ def parseXmlColor(colorStr: str) -> QColor:
             g = (colorInt >> 8) & 0xFF  
             b = colorInt & 0xFF
             return QColor(r, g, b)
-    except ValueError:
+    except (ValueError, TypeError) as e:
+        logger.warning(f"parseXmlColor failed to parse '{colorStr}': {e}, using gray as fallback")
         return QColor(Qt.gray)
