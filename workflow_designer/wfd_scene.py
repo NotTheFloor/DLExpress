@@ -18,6 +18,8 @@ from workflow_designer.wfd_undo_system import UndoStack
 from workflow_designer.wfd_logger import logger
 from workflow_designer.wfd_selection_manager import ThemeDetector
 from workflow_designer.wfd_undo_system import MovementTracker
+from workflow_designer.wfd_entity_factory import create_status_at_position
+from workflow_designer.wfd_xml_builder import add_node_to_xml_string
 
 if TYPE_CHECKING:
     from workflow_designer.scene_manager import WorkflowSceneManager
@@ -82,7 +84,6 @@ class WorkflowStatusLine(QObject):
     
     def set_selected(self, selected: bool):
         """Set visual selection state"""
-        from workflow_designer.wfd_selection_manager import ThemeDetector
         
         self._is_selected = selected
         if selected:
@@ -232,7 +233,6 @@ class WFWorkflow(WFEntity):
         original_mouse_press = self.shape.graphicsItem.mousePressEvent
         
         def smart_mouse_press(event):
-            from PySide6.QtCore import Qt
             if event.button() == Qt.LeftButton:
                 # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
                 modifiers = event.modifiers()
@@ -260,6 +260,9 @@ class WFWorkflow(WFEntity):
     
     def _find_status_line_at_position(self, local_pos) -> Optional['WorkflowStatusLine']:
         """Find which status line (if any) was clicked at the given local position"""
+        # Get workflow width for expanding clickable area
+        workflow_width = self.shape.graphicsItem.boundingRect().width()
+        
         for status_line in self.status_lines:
             # Get the bounding rectangle of the status text item
             text_rect = status_line.text_item.boundingRect()
@@ -267,9 +270,15 @@ class WFWorkflow(WFEntity):
             
             # Create the absolute rectangle for the status text
             absolute_rect = text_rect.translated(text_pos)
+            
+            # Expand clickable area to extend nearly to the workflow width
+            # Keep a small margin (DEF_ITM_X_PAD) from the right edge
+            expanded_width = workflow_width - text_pos.x() - DEF_ITM_X_PAD
+            expanded_rect = absolute_rect
+            expanded_rect.setWidth(expanded_width)
 
-            # Check if click position is within this status line's text area
-            if absolute_rect.contains(local_pos):
+            # Check if click position is within this expanded status line area
+            if expanded_rect.contains(local_pos):
                 return status_line
         
         return None
@@ -393,7 +402,6 @@ class WFLineGroup:
                     y = float(point['Y'])
                     waypoints.append((x, y))
                 except (KeyError, ValueError) as e:
-                    from workflow_designer.wfd_logger import logger
                     logger.warning(f"Invalid point data in link: {point}, error: {e}")
                     
         return waypoints
@@ -561,8 +569,6 @@ class WFScene(QObject):
         Returns:
             Created WFStatus entity
         """
-        from workflow_designer.wfd_entity_factory import create_status_at_position
-        from workflow_designer.wfd_xml_builder import add_node_to_xml_string
         
         # Create status data using entity factory
         status_data = create_status_at_position(
@@ -605,8 +611,6 @@ class WFScene(QObject):
         Returns:
             Created WFWorkflow entity
         """
-        from workflow_designer.wfd_entity_factory import create_workflow_at_position
-        from workflow_designer.wfd_xml_builder import add_node_to_xml_string
         
         # Get workflow info from scene manager
         workflow_info = self._get_workflow_info_by_key(workflow_key)
@@ -732,7 +736,6 @@ class WFScene(QObject):
     
     def _get_workflow_info_by_key(self, workflow_key: str) -> Optional[Dict[str, Any]]:
         """Get workflow information from scene manager by key"""
-        from doclink_py.models.doclink_type_utilities import get_object_from_list
         
         workflow = get_object_from_list(self.sceneManager.workflows, "WorkflowKey", workflow_key.upper())
         if workflow:
