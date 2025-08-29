@@ -1,6 +1,6 @@
 import random
 
-from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout, QGraphicsScene, QRubberBand
+from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout, QGraphicsScene, QRubberBand, QMessageBox
 from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics, QSurfaceFormat
 from PySide6.QtCore import QPoint, QRect, Qt, QRectF
 
@@ -14,6 +14,8 @@ from .wfd_utilities import drawArrow
 from .wfd_logger import logger
 from .wfd_rendering_config import RenderingOptimizer, default_config
 from .wfd_deletion_manager import DeletionManager
+from workflow_designer.wfd_context_menu import setup_context_menu_for_widget, SimpleStatusInputDialog
+from workflow_designer.wfd_workflow_selector import select_workflow_for_scene
 
 _DEF_DW_SZ_X = 1400
 _DEF_DW_SZ_Y = 900
@@ -475,7 +477,6 @@ class DrawingWidget(QFrame):
     
     def _setup_context_menu(self):
         """Set up context menu functionality for the graphics view"""
-        from workflow_designer.wfd_context_menu import setup_context_menu_for_widget
         
         def get_current_scene():
             """Get the current WFScene"""
@@ -509,12 +510,12 @@ class DrawingWidget(QFrame):
         # Connect context menu signals to our handlers
         self.context_menu_handler.add_status_requested.connect(self._handle_add_status_request)
         self.context_menu_handler.add_workflow_requested.connect(self._handle_add_workflow_request)
+        self.context_menu_handler.connect_to_target_requested.connect(self._handle_connect_to_target_request)
         
         logger.debug("Context menu functionality set up for drawing widget")
     
     def _handle_add_status_request(self, position, default_title):
         """Handle request to add a new status"""
-        from workflow_designer.wfd_context_menu import SimpleStatusInputDialog
         
         # Get status title from user
         title = SimpleStatusInputDialog.get_status_title(self, default_title)
@@ -542,7 +543,6 @@ class DrawingWidget(QFrame):
     
     def _handle_add_workflow_request(self, position):
         """Handle request to add an existing workflow"""
-        from workflow_designer.wfd_workflow_selector import select_workflow_for_scene
         
         # Get current scene
         wf_scene = self._get_current_wf_scene()
@@ -575,6 +575,46 @@ class DrawingWidget(QFrame):
         except Exception as e:
             logger.error(f"Failed to add existing workflow: {e}")
             self._show_error_message("Add Workflow Error", f"Failed to add workflow: {str(e)}")
+    
+    def _handle_connect_to_target_request(self, target):
+        """Handle request to create connections to a target"""
+        # Get current scene
+        wf_scene = self._get_current_wf_scene()
+        if not wf_scene:
+            logger.error("No current WFScene available for creating connections")
+            return
+        
+        # Get selected items
+        selected_items = list(wf_scene.selection_manager.get_selected_items()) if wf_scene.selection_manager else []
+        if not selected_items:
+            logger.warning("No items selected for connection creation")
+            self._show_error_message("Connection Error", "No items are selected to connect from")
+            return
+        
+        try:
+            # Create the connections
+            created_connections = wf_scene.create_connections_visual(selected_items, target)
+            
+            if created_connections:
+                # Refresh the graphics scene to show the new connections
+                self._refresh_graphics_scene(wf_scene)
+                
+                # Get target description for user feedback
+                from workflow_designer.wfd_context_menu import ContextMenuHandler
+                context_handler = ContextMenuHandler()
+                target_desc = context_handler._get_target_description(target)
+                
+                logger.info(f"Created {len(created_connections)} connection(s) to {target_desc}")
+                
+                # Optionally clear selection after connecting
+                wf_scene.selection_manager.deselect_all()
+            else:
+                logger.warning("No connections were created")
+                self._show_error_message("Connection Error", "Unable to create connections")
+            
+        except Exception as e:
+            logger.error(f"Failed to create connections: {e}")
+            self._show_error_message("Connection Error", f"Failed to create connections: {str(e)}")
     
     def _get_current_wf_scene(self):
         """Get the current WFScene object"""
@@ -632,7 +672,6 @@ class DrawingWidget(QFrame):
     
     def _show_error_message(self, title, message):
         """Show an error message to the user"""
-        from PySide6.QtWidgets import QMessageBox
         
         msg_box = QMessageBox(QMessageBox.Critical, title, message, parent=self)
         msg_box.exec()

@@ -760,6 +760,114 @@ class WFScene(QObject):
         To be implemented with proper database integration.
         """
         logger.info("TODO: Save updated layout to database") 
+    
+    def create_connections_visual(self, selected_items: list, target) -> list[WFLineGroup]:
+        """
+        Create visual connections between selected items and a target.
+        
+        Args:
+            selected_items: List of selected entities or status lines (sources)
+            target: Target entity or status line
+            
+        Returns:
+            List of created WFLineGroup objects
+        """
+        from workflow_designer.wfd_link_factory import create_connection_between_selections
+        from workflow_designer.wfd_xml_builder import add_link_to_xml_string
+        
+        if not selected_items:
+            logger.warning("No selected items provided for connection creation")
+            return []
+        
+        if target in selected_items:
+            logger.warning("Target is in selected items - cannot connect to self")
+            return []
+        
+        # Create link data for all connections
+        try:
+            links_data = create_connection_between_selections(selected_items, target)
+            if not links_data:
+                logger.warning("No valid connections could be created")
+                return []
+        except Exception as e:
+            logger.error(f"Failed to create link data: {e}")
+            return []
+        
+        created_line_groups = []
+        
+        # Create visual connections and update XML for each link
+        for link_data in links_data:
+            try:
+                # Create WFLineGroup from link data
+                line_group = self._create_line_group_from_data(link_data)
+                
+                # Add to scene collections
+                self.lines.append(line_group)
+                line_group.set_selection_manager(self.selection_manager)
+                
+                # Update XML representation
+                updated_xml = add_link_to_xml_string(self.dlPlacement.LayoutData, link_data)
+                self.dlPlacement.LayoutData = updated_xml
+                
+                created_line_groups.append(line_group)
+                
+                logger.debug(f"Created connection: {link_data['source']['key']} -> {link_data['target']['key']}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create visual connection: {e}")
+                continue
+        
+        if created_line_groups:
+            logger.info(f"Created {len(created_line_groups)} connection(s)")
+            # Placeholder for database persistence
+            self.save_connections_to_database(links_data)
+        
+        return created_line_groups
+    
+    def _create_line_group_from_data(self, link_data: Dict[str, Any]) -> WFLineGroup:
+        """
+        Create a WFLineGroup from link data.
+        
+        Args:
+            link_data: Link data dictionary from link factory
+            
+        Returns:
+            WFLineGroup object ready for scene
+        """
+        from workflow_designer.wfd_objects import Link
+        
+        # Get source and target entities
+        source_entity = link_data["source"]["entity"]
+        target_entity = link_data["target"]["entity"]
+        
+        if not source_entity or not target_entity:
+            raise ValueError("Invalid source or target entity in link data")
+        
+        # Create Link object for WFLineGroup
+        link_obj = Link(
+            linkProps={
+                "DrawColor": link_data["properties"]["draw_color"],
+                "Shadow": link_data["properties"]["shadow"],
+                "DashStyle": link_data["properties"]["dash_style"]
+            },
+            linkAttribs={
+                "LayoutLink": {
+                    "OrgKey": link_data["source"]["key"],
+                    "DstKey": link_data["target"]["key"]
+                },
+                "Point": [{"X": str(x), "Y": str(y)} for x, y in link_data["waypoints"]]
+            }
+        )
+        
+        # Create and return WFLineGroup
+        return WFLineGroup(source_entity, target_entity, link_obj)
+    
+    def save_connections_to_database(self, links_data: list[Dict[str, Any]]):
+        """
+        Placeholder method for saving connections to database.
+        To be implemented with proper database integration.
+        """
+        logger.info(f"TODO: Save {len(links_data)} connection(s) to database")
 
 
 @dataclass

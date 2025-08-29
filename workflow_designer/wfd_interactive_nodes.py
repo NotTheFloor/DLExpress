@@ -2,10 +2,12 @@ import math
 import uuid
 from typing import List, Tuple, Optional, TYPE_CHECKING
 from dataclasses import dataclass
+import time
+import traceback
 
 from PySide6.QtCore import QObject, Signal, Qt, QPointF
 from PySide6.QtGui import QPen, QBrush, QColor
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItem
+from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItem, QApplication
 
 if TYPE_CHECKING:
     from workflow_designer.wfd_utilities import MultiSegmentArrow
@@ -84,7 +86,6 @@ class WaypointNode(QGraphicsEllipseItem):
         self.setPos(x, y)
         
         # DEBUG: Log coordinate system state at creation
-        import time
         self.creation_timestamp = time.time()
         self.last_known_scene_pos = self.scenePos()
         self.last_known_item_pos = self.pos()
@@ -133,7 +134,6 @@ class WaypointNode(QGraphicsEllipseItem):
             self.move_count = 0
             
             # DEBUG: Log coordinate state at press  
-            import time
             time_since_creation = time.time() - self.creation_timestamp if self.creation_timestamp else 0
         super().mousePressEvent(event)
     
@@ -556,7 +556,6 @@ class LineNodeManager(QObject):
             """
         except Exception as e:
             logger.error(f"Error creating waypoint move command: {e}")
-            import traceback
             traceback.print_exc()
 
     
@@ -667,7 +666,6 @@ class LineNodeManager(QObject):
         
         # Brief pause to ensure all geometry updates are complete
         # This prevents timing issues with coordinate calculations
-        from PySide6.QtWidgets import QApplication
         QApplication.processEvents()  # Process any pending updates
         
         # Recreate all nodes with new waypoint
@@ -694,7 +692,6 @@ class LineNodeManager(QObject):
         temp_waypoints = original_waypoints.copy()
         
         # DEBUG: Log ghost dragging operation
-        from workflow_designer.wfd_logger import logger
         logger.debug(f"Ghost dragging: segment_index={segment_index}, "
                     f"original_waypoints={len(original_waypoints)}, "
                     f"ghost_pos=({ghost_waypoint.x:.1f},{ghost_waypoint.y:.1f})")

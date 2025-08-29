@@ -5,6 +5,8 @@ This module provides centralized deletion logic for workflow designer objects
 with proper relationship management and Qt graphics cleanup.
 """
 
+import time
+
 from typing import List, Set, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 
@@ -38,7 +40,6 @@ class DeletionResult:
         self.total_items_deleted = len(self.deleted_workflows) + len(self.deleted_statuses) + len(self.deleted_lines)
         
         if self.deletion_timestamp is None:
-            import time
             self.deletion_timestamp = time.time()
         
         if self.deletion_order is None:

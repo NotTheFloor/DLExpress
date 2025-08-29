@@ -177,6 +177,84 @@ def add_node_to_xml_string(xml_string: str, entity_data: Dict[str, Any]) -> str:
     return ET.tostring(root, encoding='unicode')
 
 
+def create_link_xml_from_data(link_data: Dict[str, Any]) -> ET.Element:
+    """
+    Create an XML Link element from link data.
+    
+    Args:
+        link_data: Link data dictionary from link factory
+        
+    Returns:
+        XML Element representing the link
+    """
+    from workflow_designer.wfd_link_factory import create_link_xml_attributes, validate_link_data
+    
+    if not validate_link_data(link_data):
+        raise ValueError("Invalid link data provided")
+    
+    # Convert link data to XML attributes format
+    xml_attrs = create_link_xml_attributes(link_data)
+    link_attribs = xml_attrs["linkAttribs"]
+    link_props = xml_attrs["linkProps"]
+    
+    # Create the main Link element
+    link = ET.Element("Link")
+    
+    # Add properties as child elements
+    for prop_name, prop_value in link_props.items():
+        prop_element = ET.SubElement(link, prop_name)
+        prop_element.text = str(prop_value)
+    
+    # Add LayoutLink element
+    layout_link = ET.SubElement(link, "LayoutLink")
+    layout_link_data = link_attribs["LayoutLink"]
+    
+    for attr_name, attr_value in layout_link_data.items():
+        layout_link.set(attr_name, str(attr_value))
+    
+    # Add Point elements if they exist
+    if "Point" in link_attribs:
+        for point_data in link_attribs["Point"]:
+            point_element = ET.SubElement(link, "Point")
+            for coord_name, coord_value in point_data.items():
+                point_element.set(coord_name, str(coord_value))
+    
+    return link
+
+
+def add_link_to_xml_string(xml_string: str, link_data: Dict[str, Any]) -> str:
+    """
+    Add a new link to an existing XML layout string.
+    
+    Args:
+        xml_string: Existing XML layout data
+        link_data: Link data dictionary from link factory
+        
+    Returns:
+        Updated XML string with new link added
+    """
+    try:
+        root = ET.fromstring(xml_string)
+    except ET.ParseError as e:
+        raise ValueError(f"Invalid XML string provided: {e}")
+    
+    # Create the link element
+    new_link = create_link_xml_from_data(link_data)
+    
+    # Add the new link to the root
+    root.append(new_link)
+    
+    # Update the link count in root attributes
+    current_links = int(root.get("Links", "0"))
+    root.set("Links", str(current_links + 1))
+    
+    # Update the date
+    root.set("Date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "-07:00")
+    
+    # Convert back to string
+    return ET.tostring(root, encoding='unicode')
+
+
 def create_complete_xml_from_data(
     entities_data: List[Dict[str, Any]], 
     links_data: Optional[List[Dict[str, Any]]] = None
@@ -211,10 +289,10 @@ def create_complete_xml_from_data(
         
         root.append(node)
     
-    # Add links (for future implementation)
+    # Add links 
     for link_data in links_data:
-        # Links will be implemented when linking functionality is added
-        pass
+        link_xml = create_link_xml_from_data(link_data)
+        root.append(link_xml)
     
     return ET.tostring(root, encoding='unicode')
 
