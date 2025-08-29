@@ -54,7 +54,7 @@ class ExtendedEllipse(QGraphicsEllipseItem):
 
 
 class Shape(QObject):
-    clicked = Signal(bool)  # Emits True if modifier key was held
+    clicked = Signal(bool, bool)  # Emits (has_modifier, has_connection_modifier)
     pressed = Signal()
     released = Signal()
     moved = Signal(QPointF)
@@ -157,7 +157,27 @@ class Shape(QObject):
                 # Detect modifier keys (Ctrl on Windows/Linux, Cmd on Mac)
                 modifiers = event.modifiers()
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
-                self.clicked.emit(has_modifier)
+                
+                # Detect 'A' key for connection creation by checking the parent view
+                has_connection_modifier = False
+                try:
+                    # Walk up the parent chain to find the graphics view
+                    current_item = self.graphicsItem
+                    while current_item:
+                        scene = current_item.scene()
+                        if scene:
+                            views = scene.views()
+                            if views:
+                                view = views[0]  # Get first view
+                                if hasattr(view, 'is_connection_mode_active'):
+                                    has_connection_modifier = view.is_connection_mode_active()
+                                break
+                        # Try parent item if scene not found
+                        current_item = current_item.parentItem()
+                except:
+                    pass
+                
+                self.clicked.emit(has_modifier, has_connection_modifier)
             # Call original handler
             original_mouse_press(event)
             

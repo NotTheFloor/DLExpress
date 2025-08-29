@@ -77,10 +77,64 @@ class WorkflowStatusLine(QObject):
         """Set the selection manager for this status line"""
         self._selection_manager = selection_manager
     
-    def handle_click(self, has_modifier: bool = False):
-        """Handle status line click - select this status line"""
-        if self._selection_manager:
+    def handle_click(self, has_modifier: bool = False, has_connection_modifier: bool = False):
+        """Handle status line click - select this status line or create connections"""
+        if has_connection_modifier and self._selection_manager:
+            # Connection mode: create connections from selected items to this status line
+            self._handle_connection_creation()
+        elif self._selection_manager:
+            # Normal selection mode
             self._selection_manager.select_item(self, with_modifier=has_modifier)
+    
+    def _handle_connection_creation(self):
+        """Handle connection creation when status line is clicked in connection mode"""
+        if not self._selection_manager:
+            return
+        
+        # Get currently selected items
+        selected_items = list(self._selection_manager.get_selected_items())
+        if not selected_items:
+            logger.debug("No items selected for connection creation")
+            return
+        
+        if self in selected_items:
+            logger.debug("Cannot connect status line to itself")
+            return
+        
+        # Find the parent scene through the workflow
+        parent_scene = None
+        try:
+            if self.workflow and self.workflow.shape and self.workflow.shape.graphicsItem:
+                qt_scene = self.workflow.shape.graphicsItem.scene()
+                if qt_scene:
+                    views = qt_scene.views()
+                    if views:
+                        view = views[0]
+                        if hasattr(view, '_wf_scene'):
+                            parent_scene = view._wf_scene
+        except:
+            pass
+        
+        if parent_scene:
+            try:
+                created_connections = parent_scene.create_connections_visual(selected_items, self)
+                if created_connections:
+                    logger.info(f"Created {len(created_connections)} connection(s) to status line '{self.status_title}'")
+                    # Refresh the graphics scene
+                    try:
+                        qt_scene = self.workflow.shape.graphicsItem.scene()
+                        views = qt_scene.views()
+                        if views:
+                            view = views[0]
+                            parent_widget = view.parent()
+                            if hasattr(parent_widget, '_refresh_graphics_scene'):
+                                parent_widget._refresh_graphics_scene(parent_scene)
+                    except Exception as e:
+                        logger.error(f"Failed to refresh graphics scene: {e}")
+            except Exception as e:
+                logger.error(f"Failed to create connections: {e}")
+        else:
+            logger.error("Could not find parent scene for connection creation")
     
     def set_selected(self, selected: bool):
         """Set visual selection state"""
@@ -133,10 +187,73 @@ class WFEntity:
         if self.shape:
             self.shape.clicked.connect(self._handle_click)
     
-    def _handle_click(self, has_modifier: bool = False):
-        """Handle entity click - select this entity"""
-        if self._selection_manager:
+    def _handle_click(self, has_modifier: bool = False, has_connection_modifier: bool = False):
+        """Handle entity click - select this entity or create connections"""
+        if has_connection_modifier and self._selection_manager:
+            # Connection mode: create connections from selected items to this entity
+            self._handle_connection_creation()
+        elif self._selection_manager:
+            # Normal selection mode
             self._selection_manager.select_item(self, with_modifier=has_modifier)
+    
+    def _handle_connection_creation(self):
+        """Handle connection creation when entity is clicked in connection mode"""
+        if not self._selection_manager:
+            return
+        
+        # Get currently selected items
+        selected_items = list(self._selection_manager.get_selected_items())
+        if not selected_items:
+            logger.debug("No items selected for connection creation")
+            return
+        
+        if self in selected_items:
+            logger.debug("Cannot connect entity to itself")
+            return
+        
+        # Find the parent scene to create connections
+        parent_scene = self._find_parent_scene()
+        if parent_scene:
+            try:
+                created_connections = parent_scene.create_connections_visual(selected_items, self)
+                if created_connections:
+                    logger.info(f"Created {len(created_connections)} connection(s) to {self.title if hasattr(self, 'title') else str(self.entityKey)}")
+                    # Refresh the graphics scene
+                    self._refresh_parent_graphics_scene(parent_scene)
+            except Exception as e:
+                logger.error(f"Failed to create connections: {e}")
+        else:
+            logger.error("Could not find parent scene for connection creation")
+    
+    def _find_parent_scene(self):
+        """Find the parent WFScene object"""
+        # This is a bit of a hack, but we need to find the scene that contains this entity
+        # We could store a back-reference, but for now we'll search
+        try:
+            if self.shape and self.shape.graphicsItem and self.shape.graphicsItem.scene():
+                qt_scene = self.shape.graphicsItem.scene()
+                views = qt_scene.views()
+                if views:
+                    view = views[0]
+                    if hasattr(view, '_wf_scene'):
+                        return view._wf_scene
+        except:
+            pass
+        return None
+    
+    def _refresh_parent_graphics_scene(self, wf_scene):
+        """Refresh the graphics scene after creating connections"""
+        try:
+            if self.shape and self.shape.graphicsItem and self.shape.graphicsItem.scene():
+                qt_scene = self.shape.graphicsItem.scene()
+                views = qt_scene.views()
+                if views:
+                    view = views[0]
+                    parent_widget = view.parent()
+                    if hasattr(parent_widget, '_refresh_graphics_scene'):
+                        parent_widget._refresh_graphics_scene(wf_scene)
+        except Exception as e:
+            logger.error(f"Failed to refresh graphics scene: {e}")
     
     def addSourceLine(self, line: 'WFLineGroup'):
         """Add a line that originates from this entity"""
@@ -238,6 +355,23 @@ class WFWorkflow(WFEntity):
                 modifiers = event.modifiers()
                 has_modifier = bool(modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 
+                # Detect 'A' key for connection creation by checking the parent view
+                has_connection_modifier = False
+                try:
+                    # Find the graphics view to check connection mode
+                    scene = event.widget().scene() if hasattr(event.widget(), 'scene') else None
+                    if not scene and self.shape and self.shape.graphicsItem:
+                        scene = self.shape.graphicsItem.scene()
+                    
+                    if scene:
+                        views = scene.views()
+                        if views:
+                            view = views[0]
+                            if hasattr(view, 'is_connection_mode_active'):
+                                has_connection_modifier = view.is_connection_mode_active()
+                except:
+                    pass
+                
                 # Get click position relative to workflow
                 local_pos = event.pos()
                 
@@ -245,13 +379,13 @@ class WFWorkflow(WFEntity):
                 clicked_status_line = self._find_status_line_at_position(local_pos)
                 
                 if clicked_status_line:
-                    # Click on status line - select the status line and stop event propagation
-                    clicked_status_line.handle_click(has_modifier)
+                    # Click on status line - handle with both modifiers and stop event propagation
+                    clicked_status_line.handle_click(has_modifier, has_connection_modifier)
                     # Don't call original handler - this prevents workflow selection from firing
                     return
                 else:
-                    # Click on workflow background - select the workflow
-                    self._handle_click(has_modifier)
+                    # Click on workflow background - select the workflow or create connections
+                    self._handle_click(has_modifier, has_connection_modifier)
             
             # Only call original handler if we didn't handle a status line click
             original_mouse_press(event)

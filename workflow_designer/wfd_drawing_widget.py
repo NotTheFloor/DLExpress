@@ -28,6 +28,7 @@ class CustomGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._wf_scene = None  # Reference to WFScene for selection manager access
+        self._a_key_pressed = False  # Track 'A' key state for connection mode
         
         # Enable anti-aliasing for smooth lines and shapes
         self.setRenderHints(QPainter.RenderHint.Antialiasing | 
@@ -87,9 +88,25 @@ class CustomGraphicsView(QGraphicsView):
             self._handleUndoKey()
         elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
             self._handleRedoKey()
+        elif event.key() == Qt.Key_A:
+            # Track 'A' key press for connection mode
+            self._a_key_pressed = True
         else:
             # Call parent handler for other keys
             super().keyPressEvent(event)
+    
+    def keyReleaseEvent(self, event):
+        """Handle keyboard release events"""
+        if event.key() == Qt.Key_A:
+            # Track 'A' key release
+            self._a_key_pressed = False
+        
+        # Call parent handler
+        super().keyReleaseEvent(event)
+    
+    def is_connection_mode_active(self):
+        """Check if connection mode is active ('A' key is pressed)"""
+        return self._a_key_pressed
     
     def _handleDeleteKey(self):
         """Handle Delete key press - delete selected items"""
