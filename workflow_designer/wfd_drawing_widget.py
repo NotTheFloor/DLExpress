@@ -595,22 +595,33 @@ class DrawingWidget(QFrame):
             # Create the connections
             created_connections = wf_scene.create_connections_visual(selected_items, target)
             
+            # Get target description for user feedback
+            from workflow_designer.wfd_context_menu import ContextMenuHandler
+            context_handler = ContextMenuHandler()
+            target_desc = context_handler._get_target_description(target)
+            
             if created_connections:
                 # Refresh the graphics scene to show the new connections
                 self._refresh_graphics_scene(wf_scene)
                 
-                # Get target description for user feedback
-                from workflow_designer.wfd_context_menu import ContextMenuHandler
-                context_handler = ContextMenuHandler()
-                target_desc = context_handler._get_target_description(target)
+                # Calculate how many were attempted vs created for user feedback
+                attempted_count = len(selected_items)
+                created_count = len(created_connections)
                 
-                logger.info(f"Created {len(created_connections)} connection(s) to {target_desc}")
+                if created_count == attempted_count:
+                    logger.info(f"Created {created_count} connection(s) to {target_desc}")
+                else:
+                    skipped_count = attempted_count - created_count
+                    logger.info(f"Created {created_count} connection(s) to {target_desc} (skipped {skipped_count} duplicates)")
                 
                 # Optionally clear selection after connecting
                 wf_scene.selection_manager.deselect_all()
             else:
-                logger.warning("No connections were created")
-                self._show_error_message("Connection Error", "Unable to create connections")
+                # No connections created - check if it's due to all being duplicates
+                attempted_count = len(selected_items)
+                logger.warning(f"No connections were created (all {attempted_count} may already exist)")
+                self._show_error_message("Connection Info", 
+                    f"No new connections created to {target_desc}. All connections may already exist.")
             
         except Exception as e:
             logger.error(f"Failed to create connections: {e}")

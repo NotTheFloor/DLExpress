@@ -122,16 +122,18 @@ def create_link_xml_attributes(link_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def create_connection_between_selections(selected_items: List[Union['WFEntity', 'WorkflowStatusLine']], 
-                                       target: Union['WFEntity', 'WorkflowStatusLine']) -> List[Dict[str, Any]]:
+                                       target: Union['WFEntity', 'WorkflowStatusLine'],
+                                       existing_connection_checker=None) -> List[Dict[str, Any]]:
     """
     Create multiple link data dictionaries connecting selected items to a target.
     
     Args:
         selected_items: List of selected entities or status lines (sources)
         target: Target entity or status line
+        existing_connection_checker: Function to check if connection exists (source_key, target_key) -> bool
         
     Returns:
-        List of link data dictionaries
+        List of link data dictionaries for new connections only
     """
     if not selected_items:
         logger.warning("No selected items provided for connection creation")
@@ -142,17 +144,33 @@ def create_connection_between_selections(selected_items: List[Union['WFEntity', 
         return []
     
     link_data_list = []
+    skipped_duplicates = 0
     
     for source in selected_items:
         try:
+            # Extract connection keys for duplicate checking
+            source_key, _ = _extract_connection_info(source)
+            target_key, _ = _extract_connection_info(target)
+            
+            if not source_key or not target_key:
+                logger.error(f"Invalid connection keys: source={source_key}, target={target_key}")
+                continue
+            
+            # Check for existing connection if checker is provided
+            if existing_connection_checker and existing_connection_checker(source_key, target_key):
+                logger.info(f"Skipping duplicate connection: {source_key} -> {target_key}")
+                skipped_duplicates += 1
+                continue
+            
             link_data = create_link_data(source, target)
             link_data_list.append(link_data)
             logger.debug(f"Created connection from {_get_connection_description(source)} to {_get_connection_description(target)}")
+            
         except Exception as e:
             logger.error(f"Failed to create connection from {source} to {target}: {e}")
             continue
     
-    logger.info(f"Created {len(link_data_list)} connection(s) to target")
+    logger.info(f"Created {len(link_data_list)} connection(s) to target (skipped {skipped_duplicates} duplicates)")
     return link_data_list
 
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TypedDict, TYPE_CHECKING, Tuple, Dict, Any
+from typing import Optional, TypedDict, TYPE_CHECKING, Tuple, Dict, Any, List
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
@@ -783,11 +783,16 @@ class WFScene(QObject):
             logger.warning("Target is in selected items - cannot connect to self")
             return []
         
-        # Create link data for all connections
+        # Create link data for all connections, checking for duplicates
         try:
-            links_data = create_connection_between_selections(selected_items, target)
+            # Pass our duplicate checker to the link factory
+            links_data = create_connection_between_selections(
+                selected_items, 
+                target, 
+                existing_connection_checker=self.has_existing_connection
+            )
             if not links_data:
-                logger.warning("No valid connections could be created")
+                logger.warning("No new connections could be created (all may already exist)")
                 return []
         except Exception as e:
             logger.error(f"Failed to create link data: {e}")
@@ -868,6 +873,102 @@ class WFScene(QObject):
         To be implemented with proper database integration.
         """
         logger.info(f"TODO: Save {len(links_data)} connection(s) to database")
+    
+    def has_existing_connection(self, source_key: str, target_key: str) -> bool:
+        """
+        Check if a connection already exists between two entities in the specified direction.
+        
+        Args:
+            source_key: Source entity or status key
+            target_key: Target entity or status key
+            
+        Returns:
+            True if connection already exists, False otherwise
+        """
+        source_key_upper = str(source_key).upper()
+        target_key_upper = str(target_key).upper()
+        
+        for line in self.lines:
+            if not line.linkData:
+                continue
+                
+            # Extract keys from existing connection
+            layout_link = line.linkData.linkAttribs.get("LayoutLink", {})
+            existing_org_key = str(layout_link.get("OrgKey", "")).upper()
+            existing_dst_key = str(layout_link.get("DstKey", "")).upper()
+            
+            # Check if this matches the proposed connection direction
+            if existing_org_key == source_key_upper and existing_dst_key == target_key_upper:
+                logger.debug(f"Found existing connection: {existing_org_key} -> {existing_dst_key}")
+                return True
+        
+        return False
+    
+    def get_connection_summary(self, source_key: str, target_key: str) -> Dict[str, bool]:
+        """
+        Get summary of existing connections between two entities in both directions.
+        
+        Args:
+            source_key: First entity or status key
+            target_key: Second entity or status key
+            
+        Returns:
+            Dictionary with 'forward' and 'reverse' boolean values
+        """
+        return {
+            'forward': self.has_existing_connection(source_key, target_key),
+            'reverse': self.has_existing_connection(target_key, source_key)
+        }
+    
+    def get_all_connections_summary(self) -> List[Dict[str, str]]:
+        """
+        Get a summary of all existing connections in the scene.
+        
+        Returns:
+            List of connection dictionaries with source_key, target_key, and description
+        """
+        connections = []
+        
+        for line in self.lines:
+            if not line.linkData:
+                continue
+                
+            layout_link = line.linkData.linkAttribs.get("LayoutLink", {})
+            org_key = str(layout_link.get("OrgKey", "")).upper()
+            dst_key = str(layout_link.get("DstKey", "")).upper()
+            
+            if org_key and dst_key:
+                # Try to get entity descriptions for better readability
+                org_desc = self._get_entity_description_by_key(org_key)
+                dst_desc = self._get_entity_description_by_key(dst_key)
+                
+                connections.append({
+                    'source_key': org_key,
+                    'target_key': dst_key,
+                    'description': f"{org_desc} → {dst_desc}"
+                })
+        
+        return connections
+    
+    def _get_entity_description_by_key(self, key: str) -> str:
+        """Get human-readable description of entity by key"""
+        key_upper = str(key).upper()
+        
+        # Check workflows
+        for workflow in self.workflows:
+            if str(workflow.entityKey).upper() == key_upper:
+                return f"workflow '{workflow.title}'"
+            # Check workflow status lines
+            for status_line in workflow.status_lines:
+                if status_line.status_key and str(status_line.status_key).upper() == key_upper:
+                    return f"status line '{status_line.status_title}' in workflow '{workflow.title}'"
+        
+        # Check standalone statuses
+        for status in self.statuses:
+            if str(status.entityKey).upper() == key_upper:
+                return f"status '{status.title}'"
+        
+        return f"entity '{key}'"
 
 
 @dataclass
