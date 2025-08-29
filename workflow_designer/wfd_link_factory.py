@@ -26,8 +26,8 @@ def create_link_data(source: Union['WFEntity', 'WorkflowStatusLine'],
     Create link data dictionary for connecting two entities or status lines.
     
     Args:
-        source: Source entity or status line
-        target: Target entity or status line
+        source: Source entity or status line (cannot be a workflow)
+        target: Target entity or status line (cannot be a workflow)
         waypoints: Optional list of (x, y) waypoint coordinates
         
     Returns:
@@ -35,6 +35,13 @@ def create_link_data(source: Union['WFEntity', 'WorkflowStatusLine'],
     """
     if waypoints is None:
         waypoints = []
+    
+    # Validate that source and target are not workflow entities
+    if hasattr(source, 'statuses'):  # WFWorkflow
+        raise ValueError(f"Source cannot be a workflow entity - use specific status lines within the workflow")
+    
+    if hasattr(target, 'statuses'):  # WFWorkflow  
+        raise ValueError(f"Target cannot be a workflow entity - use specific status lines within the workflow")
     
     # Generate unique link ID
     link_id = generate_unique_link_id()

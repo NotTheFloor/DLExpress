@@ -50,12 +50,22 @@ class ContextMenuHandler(QObject):
         
         # Connection options (only show if items are selected and target is different)
         if has_selection and self._current_target and self._current_target not in selected_items:
-            connect_action = QAction("Connect to Here", menu)
-            target_description = self._get_target_description(self._current_target)
-            connect_action.setToolTip(f"Create connection(s) from selected items to {target_description}")
-            connect_action.triggered.connect(self._handle_connect_to_target)
-            menu.addAction(connect_action)
-            menu.addSeparator()
+            # Check if target is a valid connection target (not a workflow)
+            if self._is_valid_connection_target(self._current_target):
+                connect_action = QAction("Connect to Here", menu)
+                target_description = self._get_target_description(self._current_target)
+                connect_action.setToolTip(f"Create connection(s) from selected items to {target_description}")
+                connect_action.triggered.connect(self._handle_connect_to_target)
+                menu.addAction(connect_action)
+                menu.addSeparator()
+            else:
+                # Show disabled action with explanation for workflows
+                if hasattr(self._current_target, 'statuses'):  # WFWorkflow
+                    disabled_action = QAction("Cannot Connect to Workflow", menu)
+                    disabled_action.setEnabled(False)
+                    disabled_action.setToolTip("Connections must be made to specific status lines within workflows, not to the workflow itself")
+                    menu.addAction(disabled_action)
+                    menu.addSeparator()
         
         # Standard creation actions (only show on empty space)
         if not self._current_target:
@@ -165,6 +175,12 @@ class ContextMenuHandler(QObject):
         
         # Nothing found - empty space
         return None
+    
+    def _is_valid_connection_target(self, target: object) -> bool:
+        """Check if a target is valid for connections (not a workflow)"""
+        if hasattr(target, 'statuses'):  # WFWorkflow
+            return False
+        return True
     
     def _get_target_description(self, target: object) -> str:
         """Get a human-readable description of the target for UI display"""

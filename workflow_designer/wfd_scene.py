@@ -101,6 +101,19 @@ class WorkflowStatusLine(QObject):
             logger.debug("Cannot connect status line to itself")
             return
         
+        # Filter out any workflow entities from selected items - only allow status entities and status lines
+        valid_selected_items = []
+        for item in selected_items:
+            if hasattr(item, 'statuses'):  # WFWorkflow
+                logger.debug(f"Skipping workflow '{item.title}' - workflows cannot be connection sources")
+                continue
+            else:
+                valid_selected_items.append(item)
+        
+        if not valid_selected_items:
+            logger.debug("No valid items selected for connection creation (workflows are not connectable)")
+            return
+        
         # Find the parent scene through the workflow
         parent_scene = None
         try:
@@ -117,7 +130,7 @@ class WorkflowStatusLine(QObject):
         
         if parent_scene:
             try:
-                created_connections = parent_scene.create_connections_visual(selected_items, self)
+                created_connections = parent_scene.create_connections_visual(valid_selected_items, self)
                 if created_connections:
                     logger.info(f"Created {len(created_connections)} connection(s) to status line '{self.status_title}'")
                     # Refresh the graphics scene
@@ -201,6 +214,11 @@ class WFEntity:
         if not self._selection_manager:
             return
         
+        # Check if this entity is a workflow - workflows cannot be connection targets
+        if hasattr(self, 'statuses'):  # This indicates it's a WFWorkflow
+            logger.debug("Cannot create connections to workflows - use specific status lines within the workflow")
+            return
+        
         # Get currently selected items
         selected_items = list(self._selection_manager.get_selected_items())
         if not selected_items:
@@ -211,11 +229,24 @@ class WFEntity:
             logger.debug("Cannot connect entity to itself")
             return
         
+        # Filter out any workflow entities from selected items - only allow status entities and status lines
+        valid_selected_items = []
+        for item in selected_items:
+            if hasattr(item, 'statuses'):  # WFWorkflow
+                logger.debug(f"Skipping workflow '{item.title}' - workflows cannot be connection sources")
+                continue
+            else:
+                valid_selected_items.append(item)
+        
+        if not valid_selected_items:
+            logger.debug("No valid items selected for connection creation (workflows are not connectable)")
+            return
+        
         # Find the parent scene to create connections
         parent_scene = self._find_parent_scene()
         if parent_scene:
             try:
-                created_connections = parent_scene.create_connections_visual(selected_items, self)
+                created_connections = parent_scene.create_connections_visual(valid_selected_items, self)
                 if created_connections:
                     logger.info(f"Created {len(created_connections)} connection(s) to {self.title if hasattr(self, 'title') else str(self.entityKey)}")
                     # Refresh the graphics scene

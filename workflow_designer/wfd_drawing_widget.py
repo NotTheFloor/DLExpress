@@ -43,7 +43,23 @@ class CustomGraphicsView(QGraphicsView):
     
     def set_wf_scene(self, wf_scene):
         """Set the workflow scene reference for selection handling"""
+        # Disconnect from previous scene if it exists
+        if self._wf_scene and hasattr(self._wf_scene, 'selection_manager'):
+            try:
+                self._wf_scene.selection_manager.selectionChanged.disconnect(self._on_selection_changed)
+            except:
+                pass
+        
         self._wf_scene = wf_scene
+        
+        # Connect to new scene's selection manager
+        if self._wf_scene and hasattr(self._wf_scene, 'selection_manager'):
+            self._wf_scene.selection_manager.selectionChanged.connect(self._on_selection_changed)
+    
+    def _on_selection_changed(self, selected_items):
+        """Handle selection changes to update cursor in connection mode"""
+        if self._a_key_pressed:
+            self._update_connection_cursor()
     
     def enable_opengl_antialiasing(self, samples=4):
         """
@@ -91,6 +107,7 @@ class CustomGraphicsView(QGraphicsView):
         elif event.key() == Qt.Key_A:
             # Track 'A' key press for connection mode
             self._a_key_pressed = True
+            self._update_connection_cursor()
         else:
             # Call parent handler for other keys
             super().keyPressEvent(event)
@@ -100,6 +117,7 @@ class CustomGraphicsView(QGraphicsView):
         if event.key() == Qt.Key_A:
             # Track 'A' key release
             self._a_key_pressed = False
+            self._update_connection_cursor()
         
         # Call parent handler
         super().keyReleaseEvent(event)
@@ -107,6 +125,36 @@ class CustomGraphicsView(QGraphicsView):
     def is_connection_mode_active(self):
         """Check if connection mode is active ('A' key is pressed)"""
         return self._a_key_pressed
+    
+    def _update_connection_cursor(self):
+        """Update cursor based on connection mode and selection state"""
+        from PySide6.QtGui import QCursor, QPixmap
+        
+        if self._a_key_pressed and self._has_selected_items():
+            # Connection mode with selected items - use crosshair cursor for "ready to connect"
+            self.setCursor(Qt.CrossCursor)
+        elif self._a_key_pressed:
+            # Connection mode but no items selected - use pointing hand cursor for "select items first"
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            # Normal mode - restore default cursor
+            self.unsetCursor()
+    
+    def _has_selected_items(self):
+        """Check if there are any selected items in the current scene"""
+        if self._wf_scene and hasattr(self._wf_scene, 'selection_manager'):
+            selected_items = self._wf_scene.selection_manager.get_selected_items()
+            return len(selected_items) > 0
+        return False
+    
+    def focusOutEvent(self, event):
+        """Handle focus loss - reset connection mode to prevent stuck cursor"""
+        # Reset connection mode when focus is lost to prevent stuck cursor
+        if self._a_key_pressed:
+            self._a_key_pressed = False
+            self._update_connection_cursor()
+        
+        super().focusOutEvent(event)
     
     def _handleDeleteKey(self):
         """Handle Delete key press - delete selected items"""
