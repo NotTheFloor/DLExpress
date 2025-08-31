@@ -1,7 +1,7 @@
 import random
 
 from PySide6.QtWidgets import QFrame, QGraphicsView, QVBoxLayout, QGraphicsScene, QRubberBand, QMessageBox
-from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics, QSurfaceFormat
+from PySide6.QtGui import QPainter, QPen, QColor, QFontMetrics, QSurfaceFormat, QCursor, QPixmap
 from PySide6.QtCore import QPoint, QRect, Qt, QRectF
 
 try:
@@ -128,7 +128,6 @@ class CustomGraphicsView(QGraphicsView):
     
     def _update_connection_cursor(self):
         """Update cursor based on connection mode and selection state"""
-        from PySide6.QtGui import QCursor, QPixmap
         
         if self._a_key_pressed and self._has_selected_items():
             # Connection mode with selected items - use crosshair cursor for "ready to connect"

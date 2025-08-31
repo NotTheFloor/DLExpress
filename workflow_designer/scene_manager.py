@@ -9,6 +9,8 @@ from doclink_py.models.doclink_type_utilities import *
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsTextItem 
 
+from workflow_designer.wfd_entity_factory import create_doclink_status_from_data
+
 class WorkflowSceneManager(QObject):
     sceneSelectionChanged = Signal()
 
@@ -53,6 +55,28 @@ class WorkflowSceneManager(QObject):
         except Exception as e:
             logger.critical(f"Failed to initialize WorkflowSceneManager: {e}")
             raise
+
+    def propogate_new_status(self, status, workflow_key):
+
+        wfa = create_doclink_status_from_data(status, 
+                                              self.wfSceneDict[workflow_key].sceneWorkflow.WorkflowID,
+                                              len(self.wfSceneDict[workflow_key].statuses) - 1
+                                              )
+
+        self.statuses.append(wfa)
+
+        logger.debug(f"Propogating new status {wfa.Title} from workflow {workflow_key}")
+        for wf_key, scene in self.wfSceneDict.items():
+            # Ignore self
+            print(f"--- On scene {wf_key} - {scene.sceneWorkflow.Title} ---")
+            if wf_key == workflow_key:
+                continue
+
+            for wf in scene.workflows:
+                print(f"Checking {wf.entityKey} against {workflow_key}")
+                if wf.entityKey.upper() == workflow_key.upper():
+                    logger.debug(f"Adding status {wfa.Title} to {wf.title}")
+                    wf.add_new_status_line(wfa)
 
     def get_current_workflow(self):
         if self.current_workflow_key:
@@ -119,6 +143,7 @@ class WorkflowSceneManager(QObject):
                             logger.error(f"Error adding line segments to scene: {e}")
                     
                     self.graphicScenes[scene_key] = new_scene
+                    scene.graphics_scene = new_scene
                     logger.debug(f"Successfully built scene for workflow {scene_key}")
                     
                 except Exception as e:
@@ -145,6 +170,7 @@ class WorkflowSceneManager(QObject):
                         
                     logger.debug(f"Creating scene for workflow {wf.Title}")
                     wf_scene = WFScene(placement, wf, self)
+                    wf_scene.new_status.connect(self.propogate_new_status)
                     self.newScenes.append(wf_scene)
                     # Store reference by WorkflowKey for later access
                     scene_key = str(wf.WorkflowKey)

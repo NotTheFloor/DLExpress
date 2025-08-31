@@ -4,7 +4,7 @@ from typing import Optional, TypedDict, TYPE_CHECKING, Tuple, Dict, Any, List
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen, QBrush
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 
 from doclink_py.models.doclink_type_utilities import get_object_from_list
 from doclink_py.models.workflows import Workflow, WorkflowPlacement
@@ -18,7 +18,7 @@ from workflow_designer.wfd_undo_system import UndoStack
 from workflow_designer.wfd_logger import logger
 from workflow_designer.wfd_selection_manager import ThemeDetector
 from workflow_designer.wfd_undo_system import MovementTracker
-from workflow_designer.wfd_entity_factory import create_status_at_position
+from workflow_designer.wfd_entity_factory import create_status_at_position, create_workflow_at_position
 from workflow_designer.wfd_xml_builder import add_node_to_xml_string
 
 if TYPE_CHECKING:
@@ -177,7 +177,7 @@ class WorkflowStatusLine(QObject):
 
 
 class WFEntity:
-    def __init__(self, entityKey, entityType):
+    def __init__(self, entityKey, entityType, parent_scene):
         self.entityKey = entityKey
         self.entityType: EntityType = entityType
 
@@ -188,6 +188,8 @@ class WFEntity:
         self.destKeys: list = []
         self.sourceLines: list = []
         self.destLines: list = []
+
+        self.parent_scene = parent_scene
         
         # Selection manager will be set when entity is added to scene
         self._selection_manager = None
@@ -212,6 +214,7 @@ class WFEntity:
     def _handle_connection_creation(self):
         """Handle connection creation when entity is clicked in connection mode"""
         if not self._selection_manager:
+            logger.warning("No seleciton manager in _handle_connection_creation in scene")
             return
         
         # Check if this entity is a workflow - workflows cannot be connection targets
@@ -242,35 +245,17 @@ class WFEntity:
             logger.debug("No valid items selected for connection creation (workflows are not connectable)")
             return
         
-        # Find the parent scene to create connections
-        parent_scene = self._find_parent_scene()
-        if parent_scene:
+        if self.parent_scene:
             try:
-                created_connections = parent_scene.create_connections_visual(valid_selected_items, self)
+                created_connections = self.parent_scene.create_connections_visual(valid_selected_items, self)
                 if created_connections:
                     logger.info(f"Created {len(created_connections)} connection(s) to {self.title if hasattr(self, 'title') else str(self.entityKey)}")
                     # Refresh the graphics scene
-                    self._refresh_parent_graphics_scene(parent_scene)
+                    self._refresh_parent_graphics_scene(self.parent_scene)
             except Exception as e:
                 logger.error(f"Failed to create connections: {e}")
         else:
             logger.error("Could not find parent scene for connection creation")
-    
-    def _find_parent_scene(self):
-        """Find the parent WFScene object"""
-        # This is a bit of a hack, but we need to find the scene that contains this entity
-        # We could store a back-reference, but for now we'll search
-        try:
-            if self.shape and self.shape.graphicsItem and self.shape.graphicsItem.scene():
-                qt_scene = self.shape.graphicsItem.scene()
-                views = qt_scene.views()
-                if views:
-                    view = views[0]
-                    if hasattr(view, '_wf_scene'):
-                        return view._wf_scene
-        except:
-            pass
-        return None
     
     def _refresh_parent_graphics_scene(self, wf_scene):
         """Refresh the graphics scene after creating connections"""
@@ -312,9 +297,13 @@ class WFEntity:
 
 # I think I shouldn't extend WFEntity and should use composition but whatever
 class WFWorkflow(WFEntity):
-    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None, statusObjects: list = None):
-        super().__init__(entityKey, EntityType.WORKFLOW)
+    def __init__(self, entityKey, title: str, statuses: list[str], rect: Rect, 
+                 parent_scene, titleFont: Optional[WFDFont] = None, fillColor=None, 
+                 drawColor=None, statusObjects: list = None):
 
+        super().__init__(entityKey, EntityType.WORKFLOW, parent_scene)
+
+        ## WE ARE GOING TO MAKE AN ADD STATUS LINE METHOD AIGHT
         self.title = title
         self.statuses = statuses
         self.statusObjects = statusObjects or []  # Full status objects with keys
@@ -323,55 +312,73 @@ class WFWorkflow(WFEntity):
 
         # This should read off nodeRect info to determine if square or circle
         self.shape = ShapeRect(rect, fillColor=fillColor, drawColor=drawColor)
+
+        # Keep this for later status line adds
+        self.titleFont = titleFont
         
         # Create title
-        titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
-        if titleFont:
-            titleItem.setFont(createFontFromWFDFont(titleFont))
-        titleItem.setDefaultTextColor(Qt.red)
-        titleItem.setPos(0, 0)
-        self.textItems.append(titleItem)
-        yPadding = (titleItem.boundingRect().height() - QFontMetrics(titleItem.font()).height()) / 2
+        self.titleItem = QGraphicsTextItem(title, parent=self.shape.graphicsItem)
+        if self.titleFont:
+            self.titleItem.setFont(createFontFromWFDFont(titleFont))
+        self.titleItem.setDefaultTextColor(Qt.red)
+        self.titleItem.setPos(0, 0)
+        self.textItems.append(self.titleItem)
 
         # Create status text items and build position mapping
         for i, statusLine in enumerate(self.statuses):
-            statusItem = QGraphicsTextItem(statusLine, parent=self.shape.graphicsItem)
-
-            if titleFont:
-                statusItem.setFont(createFontFromWFDFont(titleFont))
-
-            y_pos = (titleItem.boundingRect().height() - yPadding) * (i+1)
-            statusItem.setPos(DEF_ITM_X_PAD, y_pos)
-            statusItem.setZValue(2)
-            
-            self.textItems.append(statusItem)
-            
-            # Map status key to position if we have status objects
-            status_key = None
-            if i < len(self.statusObjects):
-                status_obj = self.statusObjects[i]
-                # Get status key from WorkflowActivity object
-                status_key = getattr(status_obj, 'WorkflowActivityKey', None)
-                if status_key:
-                    text_height = statusItem.boundingRect().height()
-                    self.status_positions[str(status_key).upper()] = (DEF_ITM_X_PAD, y_pos, text_height)
-            
-            # Create WorkflowStatusLine object for this status
-            status_line_obj = WorkflowStatusLine(
-                workflow=self,
-                status_key=status_key,
-                status_title=statusLine,
-                text_item=statusItem,
-                position_info=(DEF_ITM_X_PAD, y_pos, statusItem.boundingRect().height())
-            )
-            self.status_lines.append(status_line_obj)
+            self._add_status_text_item(statusLine, i)
 
         self.shape.graphicsItem.setZValue(0)
-        titleItem.setZValue(2)
+        self.titleItem.setZValue(2)
         
         # Override click handling to support status line selection
         self._setup_smart_click_handling()
-    
+
+    def add_new_status_line(self, wfa):
+        self.statuses.append(wfa.Title)
+
+        self.statusObjects.append(wfa)
+
+        new_status_line = self._add_status_text_item(wfa.Title, wfa.Seq)
+
+        new_status_line.set_selection_manager(self._selection_manager)
+
+    def _add_status_text_item(self, statusLine, i):
+        yPadding = (self.titleItem.boundingRect().height() - QFontMetrics(self.titleItem.font()).height()) / 2
+
+        statusItem = QGraphicsTextItem(statusLine, parent=self.shape.graphicsItem)
+
+        if self.titleFont:
+            statusItem.setFont(createFontFromWFDFont(self.titleFont))
+
+        y_pos = (self.titleItem.boundingRect().height() - yPadding) * (i+1)
+        statusItem.setPos(DEF_ITM_X_PAD, y_pos)
+        statusItem.setZValue(2)
+        
+        self.textItems.append(statusItem)
+        
+        # Map status key to position if we have status objects
+        status_key = None
+        if i < len(self.statusObjects):
+            status_obj = self.statusObjects[i]
+            # Get status key from WorkflowActivity object
+            status_key = getattr(status_obj, 'WorkflowActivityKey', None)
+            if status_key:
+                text_height = statusItem.boundingRect().height()
+                self.status_positions[str(status_key).upper()] = (DEF_ITM_X_PAD, y_pos, text_height)
+        
+        # Create WorkflowStatusLine object for this status
+        status_line_obj = WorkflowStatusLine(
+            workflow=self,
+            status_key=status_key,
+            status_title=statusLine,
+            text_item=statusItem,
+            position_info=(DEF_ITM_X_PAD, y_pos, statusItem.boundingRect().height())
+        )
+        self.status_lines.append(status_line_obj)
+
+        return status_line_obj
+
     def _setup_smart_click_handling(self):
         """Override the workflow's click handling to distinguish between status lines and workflow background"""
         if not self.shape or not self.shape.graphicsItem:
@@ -400,6 +407,8 @@ class WFWorkflow(WFEntity):
                             view = views[0]
                             if hasattr(view, 'is_connection_mode_active'):
                                 has_connection_modifier = view.is_connection_mode_active()
+                    else:
+                        logger.warning("No scene was ever found during smart_mouse setup")
                 except:
                     pass
                 
@@ -432,6 +441,10 @@ class WFWorkflow(WFEntity):
             # Get the bounding rectangle of the status text item
             text_rect = status_line.text_item.boundingRect()
             text_pos = status_line.text_item.pos()
+
+            print(status_line.status_title)
+            print(text_rect)
+            print(text_pos)
             
             # Create the absolute rectangle for the status text
             absolute_rect = text_rect.translated(text_pos)
@@ -484,8 +497,10 @@ class WFWorkflow(WFEntity):
 
 
 class WFStatus(WFEntity):
-    def __init__(self, entityKey, title: str, rect: Rect, titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None):
-        super().__init__(entityKey, EntityType.STATUS)
+    def __init__(self, entityKey, title: str, rect: Rect, parent_scene,
+                 titleFont: Optional[WFDFont] = None, fillColor=None, drawColor=None):
+
+        super().__init__(entityKey, EntityType.STATUS, parent_scene)
 
         self.title = title
 
@@ -601,6 +616,7 @@ class WFLineGroup:
 
 class WFScene(QObject):
     sceneSelectionChanged = Signal(str, set)
+    new_status = Signal(WFStatus, str)
 
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager", parent=None):
         super().__init__(parent)
@@ -615,6 +631,8 @@ class WFScene(QObject):
         
         # Create selection manager for this scene
         self.selection_manager = SelectionManager()
+
+        self.graphics_scene: Optional[QGraphicsScene] = None
         
         # Create undo/redo stack for this scene
         #self.undo_stack = UndoStack()
@@ -657,7 +675,7 @@ class WFScene(QObject):
                     raise ValueError(f"Duplicate node key in statuses: {nodeKey}")
 
                 # Needs to be implemented
-                self.statuses.append(convertStatusFromXML(node))
+                self.statuses.append(convertStatusFromXML(node, self))
 
             elif node.nodeAttribs["LayoutNode"]["Type"] == 'Workflow':
                 if get_object_from_list(self.workflows, "entityKey", nodeKey):
@@ -666,7 +684,7 @@ class WFScene(QObject):
                 # Get status objects instead of just titles
                 status_sequence = self.sceneManager.getStatusSequence(nodeKey)
                 status_titles = [st.Title for st in status_sequence]
-                self.workflows.append(convertWorkflowFromXML(node, status_titles, status_sequence))
+                self.workflows.append(convertWorkflowFromXML(node, status_titles, self, status_sequence))
 
                 # We need to add statuses
 
@@ -760,6 +778,9 @@ class WFScene(QObject):
             self.statuses.remove(status_entity)
             raise
         
+        print("emitting new status")
+        self.new_status.emit(status_entity, status_data['workflow_key'])
+
         # Placeholder for database persistence
         self.save_new_status_to_database(status_data)
         
@@ -847,6 +868,7 @@ class WFScene(QObject):
             status_data["key"],
             status_data["title"],
             rect,
+            self,
             font,
             fillColor=fillColor,
             drawColor=drawColor
@@ -893,6 +915,7 @@ class WFScene(QObject):
             workflow_data["title"],
             status_titles,
             rect,
+            self,
             font,
             fillColor=fillColor,
             drawColor=drawColor,
@@ -1146,7 +1169,7 @@ class WFDScene:
     points: list[WFDLineSegments]
 
 # Needs to be implemented
-def convertStatusFromXML(node: Node) -> WFStatus:
+def convertStatusFromXML(node: Node, parent_scene) -> WFStatus:
     font = DEFAULT_FONT
     if 'Font' in node.nodeAttribs:
         font = WFDFont(**node.nodeAttribs['Font'])
@@ -1164,13 +1187,14 @@ def convertStatusFromXML(node: Node) -> WFStatus:
             node.nodeAttribs["LayoutNode"]["Key"],
             node.nodeProps["Text"],
             node.nodeRect,
+            parent_scene,
             font,
             fillColor=fillColor,
             drawColor=drawColor
         )
 
 
-def convertWorkflowFromXML(node: Node, statuses: list[str], statusObjects: list = None) -> WFWorkflow:
+def convertWorkflowFromXML(node: Node, statuses: list[str], parent_scene, statusObjects: list = None) -> WFWorkflow:
     font = DEFAULT_FONT
     if 'Font' in node.nodeAttribs:
         font = WFDFont(**node.nodeAttribs['Font'])
@@ -1189,6 +1213,7 @@ def convertWorkflowFromXML(node: Node, statuses: list[str], statusObjects: list 
             node.nodeAttribs["LayoutNode"]["Tooltip"],
             statuses,
             node.nodeRect,
+            parent_scene,
             font,
             fillColor=fillColor,
             drawColor=drawColor,

@@ -7,6 +7,8 @@ entities as data dictionaries.
 import uuid
 from typing import Dict, Any, Optional, Tuple
 
+from doclink_py.models.workflows import WorkflowActivity
+
 from workflow_designer.wfd_data_structures import (
     create_position_dict,
     create_properties_dict,
@@ -21,6 +23,32 @@ def generate_unique_key() -> str:
     """Generate a unique GUID key for new entities"""
     return str(uuid.uuid4())
 
+def create_doclink_status_from_data(status_data, wf_id, seq_num):
+    return WorkflowActivity(
+            -1,
+            "Fake",
+            "Fake",
+            -1,
+            wf_id,
+            status_data.title,
+            'Unsaved Status',
+            seq_num,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            status_data.entityKey,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        )
 
 def create_new_status_data(
     key: Optional[str] = None,
