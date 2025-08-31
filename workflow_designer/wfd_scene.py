@@ -343,6 +343,24 @@ class WFWorkflow(WFEntity):
 
         new_status_line.set_selection_manager(self._selection_manager)
 
+        if new_status_line.position_info[1] + new_status_line.position_info[2] >= self.shape.graphicsItem.boundingRect().height():
+            print("too big triggered")
+            new_rect = self.shape.graphicsItem.rect()
+            new_rect.setHeight(self.shape.graphicsItem.rect().height() + new_status_line.position_info[2])
+            self.shape.graphicsItem.setRect(
+                    new_rect
+                    )
+            
+        print(self.title)
+        print(new_status_line.status_title)
+        print(new_status_line.position_info[1])
+        print(new_status_line.position_info[2])
+        print(f"Absolute end height: {new_status_line.position_info[1] + new_status_line.position_info[2]}")
+        print(self.shape.graphicsItem.y())
+        print(self.shape.graphicsItem.boundingRect().height())
+        
+        print(f"Absolute wf height: {self.shape.graphicsItem.y() + self.shape.graphicsItem.boundingRect().height()}")
+
     def _add_status_text_item(self, statusLine, i):
         yPadding = (self.titleItem.boundingRect().height() - QFontMetrics(self.titleItem.font()).height()) / 2
 
