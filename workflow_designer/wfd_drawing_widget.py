@@ -597,7 +597,7 @@ class DrawingWidget(QFrame):
             new_status = wf_scene.add_new_status_visual(position, title)
             
             # Refresh the graphics scene to show the new status
-            self._refresh_graphics_scene(wf_scene)
+            wf_scene._refresh_graphics_scene()
             
             logger.info(f"Added new status '{title}' at position {position}")
             
@@ -632,7 +632,7 @@ class DrawingWidget(QFrame):
             )
             
             # Refresh the graphics scene to show the new workflow
-            self._refresh_graphics_scene(wf_scene)
+            wf_scene._refresh_graphics_scene()
             
             logger.info(f"Added workflow '{selected_workflow['Title']}' at position {position}")
             
@@ -666,7 +666,7 @@ class DrawingWidget(QFrame):
             
             if created_connections:
                 # Refresh the graphics scene to show the new connections
-                self._refresh_graphics_scene(wf_scene)
+                wf_scene._refresh_graphics_scene()
                 
                 # Calculate how many were attempted vs created for user feedback
                 attempted_count = len(selected_items)
@@ -696,54 +696,6 @@ class DrawingWidget(QFrame):
         if self.currentWorkflow and self.currentWorkflow in self.sceneManagerDict:
             return self.sceneManagerDict[self.currentWorkflow]
         return None
-    
-    def _refresh_graphics_scene(self, wf_scene):
-        """Refresh the Qt graphics scene to reflect changes in WFScene"""
-        if not self.currentWorkflow or self.currentWorkflow not in self.sceneDict:
-            logger.warning("Cannot refresh graphics scene: no current workflow or scene")
-            return
-        
-        qt_scene = self.sceneDict[self.currentWorkflow]
-        
-        # Get current Qt scene items for comparison
-        current_qt_items = set(qt_scene.items())
-        
-        # Add any new entities that aren't in the Qt scene yet
-        entities_added = 0
-        
-        # Check status entities
-        for status in wf_scene.statuses:
-            if status.shape and status.shape.graphicsItem:
-                if status.shape.graphicsItem not in current_qt_items:
-                    qt_scene.addItem(status.shape.graphicsItem)
-                    entities_added += 1
-                    logger.debug(f"Added status '{status.title}' graphics item to Qt scene")
-        
-        # Check workflow entities  
-        for workflow in wf_scene.workflows:
-            if workflow.shape and workflow.shape.graphicsItem:
-                if workflow.shape.graphicsItem not in current_qt_items:
-                    qt_scene.addItem(workflow.shape.graphicsItem)
-                    entities_added += 1
-                    logger.debug(f"Added workflow '{workflow.title}' graphics item to Qt scene")
-        
-        # Check line entities (for future line additions)
-        for line in wf_scene.lines:
-            if hasattr(line, 'lineSegments'):
-                for item in line.lineSegments:
-                    # Handle both wrapped objects and raw Qt items
-                    graphics_item = getattr(item, 'graphicsItem', item)
-                    if graphics_item not in current_qt_items:
-                        qt_scene.addItem(graphics_item)
-                        entities_added += 1
-        
-        if entities_added > 0:
-            logger.info(f"Added {entities_added} new graphics items to Qt scene")
-            # Force view to update
-            if hasattr(self.view, 'viewport'):
-                self.view.viewport().update()
-        else:
-            logger.debug("No new entities to add to Qt scene")
     
     def _show_error_message(self, title, message):
         """Show an error message to the user"""

@@ -260,20 +260,6 @@ class WFEntity:
         else:
             logger.error("Could not find parent scene for connection creation")
     
-    def _refresh_parent_graphics_scene(self, wf_scene):
-        """Refresh the graphics scene after creating connections"""
-        try:
-            if self.shape and self.shape.graphicsItem and self.shape.graphicsItem.scene():
-                qt_scene = self.shape.graphicsItem.scene()
-                views = qt_scene.views()
-                if views:
-                    view = views[0]
-                    parent_widget = view.parent()
-                    if hasattr(parent_widget, '_refresh_graphics_scene'):
-                        parent_widget._refresh_graphics_scene(wf_scene)
-        except Exception as e:
-            logger.error(f"Failed to refresh graphics scene: {e}")
-    
     def addSourceLine(self, line: 'WFLineGroup'):
         """Add a line that originates from this entity"""
         if line not in self.sourceLines:
