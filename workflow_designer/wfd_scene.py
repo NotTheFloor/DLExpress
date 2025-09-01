@@ -135,13 +135,15 @@ class WorkflowStatusLine(QObject):
                     logger.info(f"Created {len(created_connections)} connection(s) to status line '{self.status_title}'")
                     # Refresh the graphics scene
                     try:
-                        qt_scene = self.workflow.shape.graphicsItem.scene()
-                        views = qt_scene.views()
-                        if views:
-                            view = views[0]
-                            parent_widget = view.parent()
-                            if hasattr(parent_widget, '_refresh_graphics_scene'):
-                                parent_widget._refresh_graphics_scene(parent_scene)
+                        parent_scene._refresh_graphics_scene()
+                        # REMOVE
+                        # qt_scene = self.workflow.shape.graphicsItem.scene()
+                        # views = qt_scene.views()
+                        # if views:
+                            # view = views[0]
+                            # parent_widget = view.parent()
+                            # if hasattr(parent_widget, '_refresh_graphics_scene'):
+                                # parent_widget._refresh_graphics_scene(parent_scene)
                     except Exception as e:
                         logger.error(f"Failed to refresh graphics scene: {e}")
             except Exception as e:
@@ -251,7 +253,8 @@ class WFEntity:
                 if created_connections:
                     logger.info(f"Created {len(created_connections)} connection(s) to {self.title if hasattr(self, 'title') else str(self.entityKey)}")
                     # Refresh the graphics scene
-                    self._refresh_parent_graphics_scene(self.parent_scene)
+                    #self._refresh_parent_graphics_scene(self.parent_scene)
+                    self.parent_scene._refresh_graphics_scene()
             except Exception as e:
                 logger.error(f"Failed to create connections: {e}")
         else:
@@ -344,23 +347,12 @@ class WFWorkflow(WFEntity):
         new_status_line.set_selection_manager(self._selection_manager)
 
         if new_status_line.position_info[1] + new_status_line.position_info[2] >= self.shape.graphicsItem.boundingRect().height():
-            print("too big triggered")
             new_rect = self.shape.graphicsItem.rect()
             new_rect.setHeight(self.shape.graphicsItem.rect().height() + new_status_line.position_info[2])
             self.shape.graphicsItem.setRect(
                     new_rect
                     )
             
-        print(self.title)
-        print(new_status_line.status_title)
-        print(new_status_line.position_info[1])
-        print(new_status_line.position_info[2])
-        print(f"Absolute end height: {new_status_line.position_info[1] + new_status_line.position_info[2]}")
-        print(self.shape.graphicsItem.y())
-        print(self.shape.graphicsItem.boundingRect().height())
-        
-        print(f"Absolute wf height: {self.shape.graphicsItem.y() + self.shape.graphicsItem.boundingRect().height()}")
-
     def _add_status_text_item(self, statusLine, i):
         yPadding = (self.titleItem.boundingRect().height() - QFontMetrics(self.titleItem.font()).height()) / 2
 
@@ -635,6 +627,7 @@ class WFLineGroup:
 class WFScene(QObject):
     sceneSelectionChanged = Signal(str, set)
     new_status = Signal(WFStatus, str)
+    existing_workflow = Signal(WFWorkflow, str, str)
 
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager", parent=None):
         super().__init__(parent)
@@ -742,6 +735,49 @@ class WFScene(QObject):
 
             self.lines.append(WFLineGroup(orgEntity, dstEntity, link))
     
+    def _refresh_graphics_scene(self):
+        """Refresh the Qt graphics scene to reflect changes in WFScene"""
+        
+        qt_scene = self.graphics_scene
+        
+        # Get current Qt scene items for comparison
+        current_qt_items = set(qt_scene.items())
+        
+        # Add any new entities that aren't in the Qt scene yet
+        entities_added = 0
+        
+        # Check status entities
+        for status in self.statuses:
+            if status.shape and status.shape.graphicsItem:
+                if status.shape.graphicsItem not in current_qt_items:
+                    qt_scene.addItem(status.shape.graphicsItem)
+                    entities_added += 1
+                    logger.debug(f"Added status '{status.title}' graphics item to Qt scene")
+        
+        # Check workflow entities  
+        for workflow in self.workflows:
+            if workflow.shape and workflow.shape.graphicsItem:
+                if workflow.shape.graphicsItem not in current_qt_items:
+                    qt_scene.addItem(workflow.shape.graphicsItem)
+                    entities_added += 1
+                    logger.debug(f"Added workflow '{workflow.title}' graphics item to Qt scene")
+        
+        # Check line entities (for future line additions)
+        for line in self.lines:
+            if hasattr(line, 'lineSegments'):
+                for item in line.lineSegments:
+                    # Handle both wrapped objects and raw Qt items
+                    graphics_item = getattr(item, 'graphicsItem', item)
+                    if graphics_item not in current_qt_items:
+                        qt_scene.addItem(graphics_item)
+                        entities_added += 1
+        
+        if entities_added > 0:
+            logger.info(f"Added {entities_added} new graphics items to Qt scene")
+            # Force view to update
+        else:
+            logger.debug("No new entities to add to Qt scene")
+
     def _connectSelectionManager(self):
         """Connect all entities and lines to the selection manager"""
         # Connect workflow entities
@@ -796,7 +832,6 @@ class WFScene(QObject):
             self.statuses.remove(status_entity)
             raise
         
-        print("emitting new status")
         self.new_status.emit(status_entity, status_data['workflow_key'])
 
         # Placeholder for database persistence
@@ -804,7 +839,7 @@ class WFScene(QObject):
         
         return status_entity
     
-    def add_existing_workflow_visual(self, position: tuple[float, float], workflow_key: str) -> WFWorkflow:
+    def add_existing_workflow_visual(self, position: tuple[float, float], workflow_key: str, propogate: bool = True) -> WFWorkflow:
         """
         Add an existing workflow as a visual entity to the scene.
         
@@ -845,6 +880,8 @@ class WFScene(QObject):
             self.workflows.remove(workflow_entity)
             raise
         
+        if propogate:
+            self.existing_workflow.emit(workflow_entity, workflow_key, self.sceneWorkflow.WorkflowKey)
         # Placeholder for database persistence
         self.save_layout_to_database()
         

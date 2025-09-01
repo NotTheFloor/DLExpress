@@ -11,6 +11,9 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsTextIt
 
 from workflow_designer.wfd_entity_factory import create_doclink_status_from_data
 
+DEF_NEW_WF_X = 10
+DEF_NEW_WF_Y = 10
+
 class WorkflowSceneManager(QObject):
     sceneSelectionChanged = Signal()
 
@@ -56,7 +59,14 @@ class WorkflowSceneManager(QObject):
             logger.critical(f"Failed to initialize WorkflowSceneManager: {e}")
             raise
 
-    def propogate_new_status(self, status, workflow_key):
+    def handle_existing_workflow(self, workflow, dest_key, orig_key):
+
+        logger.debug(f"Reciprocating workflow addition from {self.wfSceneDict[orig_key].sceneWorkflow.Title} to {self.wfSceneDict[dest_key].sceneWorkflow.Title}")
+
+        self.wfSceneDict[dest_key].add_existing_workflow_visual((DEF_NEW_WF_X, DEF_NEW_WF_Y), orig_key, False)
+        self.wfSceneDict[dest_key]._refresh_graphics_scene()
+    
+    def handle_new_status(self, status, workflow_key):
 
         wfa = create_doclink_status_from_data(status, 
                                               self.wfSceneDict[workflow_key].sceneWorkflow.WorkflowID,
@@ -170,7 +180,8 @@ class WorkflowSceneManager(QObject):
                         
                     logger.debug(f"Creating scene for workflow {wf.Title}")
                     wf_scene = WFScene(placement, wf, self)
-                    wf_scene.new_status.connect(self.propogate_new_status)
+                    wf_scene.new_status.connect(self.handle_new_status)
+                    wf_scene.existing_workflow.connect(self.handle_existing_workflow)
                     self.newScenes.append(wf_scene)
                     # Store reference by WorkflowKey for later access
                     scene_key = str(wf.WorkflowKey)
