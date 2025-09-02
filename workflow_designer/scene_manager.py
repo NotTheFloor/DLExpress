@@ -1,6 +1,6 @@
 from typing import Any 
 
-from workflow_designer.wfd_scene import WFScene
+from workflow_designer.wfd_scene import EntityType, WFScene
 from workflow_designer.wfd_logger import logger
 
 from doclink_py.models.workflows import Workflow, WorkflowActivity, WorkflowPlacement
@@ -59,6 +59,67 @@ class WorkflowSceneManager(QObject):
             logger.critical(f"Failed to initialize WorkflowSceneManager: {e}")
             raise
 
+    def handle_connection_creations(self, link_data, workflow_key):
+
+        source = link_data['source']
+        dest = link_data['target']
+        source_is_external = True
+
+        target_wf = None
+        old_status_line = None
+        old_status = None
+        if source['type'] == 'workflow_status_line':
+            target_wf = source['entity']
+            old_status_line = source
+            old_status = dest
+        elif dest['type'] == 'workflow_status_line':
+            source_is_external = False
+            target_wf = dest['entity']
+            old_status_line = dest
+            old_status = source
+        else:
+            logger.info("Status -> Status: nothing needed yet")
+            return
+
+        if target_wf.entityType != EntityType.WORKFLOW:
+            logger.error("target_wf is not type WORKFLOW")
+            return
+
+        target_scene = self.wfSceneDict[target_wf.entityKey.upper()]
+
+        new_status = None
+        print(f"--- {target_scene.sceneWorkflow.Title} ---")
+        print(old_status_line['key'].upper())
+        for status in target_scene.statuses:
+            print(status.entityKey)
+            if status.entityKey.upper() == old_status_line['key'].upper():
+                new_status = status
+                break
+
+        if new_status is None:
+            logger.error("Status inferred from status line not found in workflow")
+            return
+
+        new_workflow = None
+        new_wf_status_line = None
+        for workflow in target_scene.workflows:
+            if workflow.entityKey.upper() == workflow_key.upper():
+                new_workflow = workflow
+                for status_line in workflow.status_lines:
+                    if status_line.status_key.upper() == old_status['key'].upper():
+                        new_wf_status_line = status_line
+
+        if new_wf_status_line is None:
+            logger.error("Status line inferred from status not found in workflow")
+            return
+
+        if source_is_external:
+            target_scene.create_connections_visual([new_status], new_wf_status_line, propogate=False)
+        else:
+            target_scene.create_connections_visual([new_wf_status_line], new_status, propogate=False)
+
+        target_scene._refresh_graphics_scene()
+
     def handle_existing_workflow(self, workflow, dest_key, orig_key):
 
         logger.debug(f"Reciprocating workflow addition from {self.wfSceneDict[orig_key].sceneWorkflow.Title} to {self.wfSceneDict[dest_key].sceneWorkflow.Title}")
@@ -78,12 +139,10 @@ class WorkflowSceneManager(QObject):
         logger.debug(f"Propogating new status {wfa.Title} from workflow {workflow_key}")
         for wf_key, scene in self.wfSceneDict.items():
             # Ignore self
-            print(f"--- On scene {wf_key} - {scene.sceneWorkflow.Title} ---")
             if wf_key == workflow_key:
                 continue
 
             for wf in scene.workflows:
-                print(f"Checking {wf.entityKey} against {workflow_key}")
                 if wf.entityKey.upper() == workflow_key.upper():
                     logger.debug(f"Adding status {wfa.Title} to {wf.title}")
                     wf.add_new_status_line(wfa)
@@ -182,6 +241,7 @@ class WorkflowSceneManager(QObject):
                     wf_scene = WFScene(placement, wf, self)
                     wf_scene.new_status.connect(self.handle_new_status)
                     wf_scene.existing_workflow.connect(self.handle_existing_workflow)
+                    wf_scene.connection_created.connect(self.handle_connection_creations)
                     self.newScenes.append(wf_scene)
                     # Store reference by WorkflowKey for later access
                     scene_key = str(wf.WorkflowKey)

@@ -68,7 +68,6 @@ class MakeClickableMixin(QObject):
         def clickableMousePressEvent(event):
             if event.button() == Qt.LeftButton:
                 self.clicked.emit()
-                print("Click even emmited")
 
             originalMouseClickEvent(event)
 

@@ -19,7 +19,8 @@ from workflow_designer.wfd_logger import logger
 from workflow_designer.wfd_selection_manager import ThemeDetector
 from workflow_designer.wfd_undo_system import MovementTracker
 from workflow_designer.wfd_entity_factory import create_status_at_position, create_workflow_at_position
-from workflow_designer.wfd_xml_builder import add_node_to_xml_string
+from workflow_designer.wfd_xml_builder import add_node_to_xml_string, add_link_to_xml_string
+from workflow_designer.wfd_link_factory import create_connection_between_selections
 
 if TYPE_CHECKING:
     from workflow_designer.scene_manager import WorkflowSceneManager
@@ -438,10 +439,6 @@ class WFWorkflow(WFEntity):
             text_rect = status_line.text_item.boundingRect()
             text_pos = status_line.text_item.pos()
 
-            print(status_line.status_title)
-            print(text_rect)
-            print(text_pos)
-            
             # Create the absolute rectangle for the status text
             absolute_rect = text_rect.translated(text_pos)
             
@@ -614,6 +611,7 @@ class WFScene(QObject):
     sceneSelectionChanged = Signal(str, set)
     new_status = Signal(WFStatus, str)
     existing_workflow = Signal(WFWorkflow, str, str)
+    connection_created = Signal(dict, str)
 
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager", parent=None):
         super().__init__(parent)
@@ -990,7 +988,7 @@ class WFScene(QObject):
         """
         logger.info("TODO: Save updated layout to database") 
     
-    def create_connections_visual(self, selected_items: list, target) -> list[WFLineGroup]:
+    def create_connections_visual(self, selected_items: list, target, propogate=True) -> list[WFLineGroup]:
         """
         Create visual connections between selected items and a target.
         
@@ -1001,8 +999,6 @@ class WFScene(QObject):
         Returns:
             List of created WFLineGroup objects
         """
-        from workflow_designer.wfd_link_factory import create_connection_between_selections
-        from workflow_designer.wfd_xml_builder import add_link_to_xml_string
         
         if not selected_items:
             logger.warning("No selected items provided for connection creation")
@@ -1032,6 +1028,10 @@ class WFScene(QObject):
         # Create visual connections and update XML for each link
         for link_data in links_data:
             try:
+                
+                if propogate:
+                    self.connection_created.emit(link_data, self.sceneWorkflow.WorkflowKey)
+                
                 # Create WFLineGroup from link data
                 line_group = self._create_line_group_from_data(link_data)
                 
