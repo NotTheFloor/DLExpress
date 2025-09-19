@@ -41,7 +41,7 @@ def create_doclink_status_from_data(status_data, wf_id, seq_num):
             -1,
             -1,
             -1,
-            status_data.entityKey,
+            status_data.entityKey, # Honestly this is the UUID for a stamp... :(
             0,
             0,
             0,
@@ -187,7 +187,7 @@ def create_workflow_at_position(
         Complete workflow data dictionary
     """
     position = create_position_dict(x, y, width, height)
-    return create_workflow_data_from_existing(workflow_info, position)
+    return create_workflow_data_from_existing(workflow_info, position, workflow_info['WorkflowKey'])
 
 
 def update_entity_position(

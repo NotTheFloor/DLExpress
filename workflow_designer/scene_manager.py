@@ -14,11 +14,15 @@ from workflow_designer.wfd_entity_factory import create_doclink_status_from_data
 DEF_NEW_WF_X = 10
 DEF_NEW_WF_Y = 10
 
+SQL_ENABLED = True
+
 class WorkflowSceneManager(QObject):
     sceneSelectionChanged = Signal()
 
     def __init__(self, doclink, parent=None):
         super().__init__(parent)
+
+        self.doclink = doclink
 
         try:
             logger.info("Initializing WorkflowSceneManager")
@@ -105,7 +109,10 @@ class WorkflowSceneManager(QObject):
         for workflow in target_scene.workflows:
             if workflow.entityKey.upper() == workflow_key.upper():
                 new_workflow = workflow
+                print("we at least found the workflow")
+                print(old_status['key'])
                 for status_line in workflow.status_lines:
+                    print(status_line.status_key)
                     if status_line.status_key.upper() == old_status['key'].upper():
                         new_wf_status_line = status_line
 
@@ -134,6 +141,10 @@ class WorkflowSceneManager(QObject):
                                               len(self.wfSceneDict[workflow_key].statuses) - 1
                                               )
 
+        # Wow... that was useless
+        if SQL_ENABLED:
+            wfa = self.create_dl_wfa_from_our_object(wfa)
+
         self.statuses.append(wfa)
 
         logger.debug(f"Propogating new status {wfa.Title} from workflow {workflow_key}")
@@ -147,6 +158,28 @@ class WorkflowSceneManager(QObject):
                     logger.debug(f"Adding status {wfa.Title} to {wf.title}")
                     wf.add_new_status_line(wfa)
 
+    def create_dl_wfa_from_our_object(self, wfa) -> WorkflowActivity:
+        logger.info(f"Adding workflow status {wfa.Title} to WF with ID {wfa.WorkflowID}")
+
+        print(f"---- {wfa.WorkflowActivityKey}")
+        new_wfa = self.doclink.workflow_manager.add_workflow_activity(wfa.WorkflowID, 
+                                                            wfa.Title, None, 
+                                                            wfa.Seq, wfa.WorkflowActivityKey)
+
+        if not new_wfa:
+            logger.error("Could not create new workflow status")
+            return
+
+        return new_wfa
+
+    def handle_update_layout(self, wf_id, xml_data):
+        logger.debug(f"Placement update for {wf_id}")
+
+        #print(xml_data)
+        if SQL_ENABLED:
+            xml_data = '<?xml version="1.0" encoding="utf-16"?>\n<!--AddFlow.net diagram-->\n' + xml_data
+            self.doclink.workflow_manager.update_wf_placement_by_wf_id(wf_id, xml_data)
+
     def get_current_workflow(self):
         if self.current_workflow_key:
             return self.wfSceneDict[self.current_workflow_key]
@@ -156,6 +189,9 @@ class WorkflowSceneManager(QObject):
 
     def change_current_workflow(self, new_key):
         if new_key not in self.wfSceneDict.keys():
+            print("Keys")
+            for k in self.wfSceneDict.keys():
+                print(k)
             logger.error(f"Error: key {new_key} does not exist in workflow maps")
 
         logger.debug(f"Setting current workflow to: {new_key}")
@@ -238,12 +274,17 @@ class WorkflowSceneManager(QObject):
                         continue
                         
                     logger.debug(f"Creating scene for workflow {wf.Title}")
+                    print(f"Creating scene for workflow {wf.Title}")
+                    print(placement.LayoutData[0:100])
                     wf_scene = WFScene(placement, wf, self)
+                    print("Created wf_scene")
                     wf_scene.new_status.connect(self.handle_new_status)
                     wf_scene.existing_workflow.connect(self.handle_existing_workflow)
                     wf_scene.connection_created.connect(self.handle_connection_creations)
+                    wf_scene.update_layout.connect(self.handle_update_layout)
                     self.newScenes.append(wf_scene)
                     # Store reference by WorkflowKey for later access
+                    print("about to store key")
                     scene_key = str(wf.WorkflowKey)
                     self.wfSceneDict[scene_key] = wf_scene
                     wf_scene.sceneSelectionChanged.connect(self._sceneSelectionChanged)

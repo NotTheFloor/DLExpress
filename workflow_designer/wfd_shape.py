@@ -88,12 +88,12 @@ class Shape(QObject):
         currentCenterY = pos.y() + self.rect.height / 2
         
         # DEBUG: Log calculation details
-        from workflow_designer.wfd_logger import logger
-        logger.debug(f"getCurrentCenter() for shape type {type(self).__name__}:")
-        logger.debug(f"  Graphics pos: {pos}")
-        logger.debug(f"  Rect dimensions: width={self.rect.width}, height={self.rect.height}")
-        logger.debug(f"  Rect ellipse dims: rx={getattr(self.rect, 'rx', 'N/A')}, ry={getattr(self.rect, 'ry', 'N/A')}")
-        logger.debug(f"  Calculated center: ({currentCenterX}, {currentCenterY})")
+        # from workflow_designer.wfd_logger import logger
+        # logger.debug(f"getCurrentCenter() for shape type {type(self).__name__}:")
+        # logger.debug(f"  Graphics pos: {pos}")
+        # logger.debug(f"  Rect dimensions: width={self.rect.width}, height={self.rect.height}")
+        # logger.debug(f"  Rect ellipse dims: rx={getattr(self.rect, 'rx', 'N/A')}, ry={getattr(self.rect, 'ry', 'N/A')}")
+        # logger.debug(f"  Calculated center: ({currentCenterX}, {currentCenterY})")
         
         return currentCenterX, currentCenterY
     

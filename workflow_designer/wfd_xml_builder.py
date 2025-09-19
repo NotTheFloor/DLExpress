@@ -21,6 +21,8 @@ def create_status_node_xml(status_data: Dict[str, Any]) -> ET.Element:
     Returns:
         XML Element representing the status node
     """
+    print("CREATING NODE NODE XML")
+    print(status_data)
     if not validate_entity_data(status_data):
         raise ValueError("Invalid status data provided")
     
@@ -62,6 +64,10 @@ def create_status_node_xml(status_data: Dict[str, Any]) -> ET.Element:
     # Add LayoutNode element with attributes
     layout_elem = ET.SubElement(node, "LayoutNode")
     for key, value in layout_node.items():
+        if key == 'WorkflowKey':
+            value = value.lower()
+        print(f"{key}, {value}")
+        
         layout_elem.set(key, value)
     
     return node
@@ -77,6 +83,9 @@ def create_workflow_node_xml(workflow_data: Dict[str, Any]) -> ET.Element:
     Returns:
         XML Element representing the workflow node
     """
+    print("CREATING WF NODE XML")
+    print(workflow_data)
+
     if not validate_entity_data(workflow_data):
         raise ValueError("Invalid workflow data provided")
     
@@ -111,6 +120,8 @@ def create_workflow_node_xml(workflow_data: Dict[str, Any]) -> ET.Element:
     # Add LayoutNode element with attributes
     layout_elem = ET.SubElement(node, "LayoutNode")
     for key, value in layout_node.items():
+        if key in ('Key', 'WorkflowKey'):
+            value = value.lower()
         layout_elem.set(key, value)
     
     return node
@@ -150,6 +161,9 @@ def add_node_to_xml_string(xml_string: str, entity_data: Dict[str, Any]) -> str:
     Returns:
         Updated XML string with new node added
     """
+
+    print("ADDING NODE XML TO STRING")
+    print(entity_data)
     try:
         root = ET.fromstring(xml_string)
     except ET.ParseError as e:
@@ -191,6 +205,9 @@ def create_link_xml_from_data(link_data: Dict[str, Any]) -> ET.Element:
     
     if not validate_link_data(link_data):
         raise ValueError("Invalid link data provided")
+    
+    print("CREATING LINK XML")
+    print(link_data)
     
     # Convert link data to XML attributes format
     xml_attrs = create_link_xml_attributes(link_data)
@@ -237,6 +254,9 @@ def add_link_to_xml_string(xml_string: str, link_data: Dict[str, Any]) -> str:
         root = ET.fromstring(xml_string)
     except ET.ParseError as e:
         raise ValueError(f"Invalid XML string provided: {e}")
+
+    print("ADDING LINK XML TO STRING")
+    print(link_data)
     
     # Create the link element
     new_link = create_link_xml_from_data(link_data)
@@ -252,7 +272,9 @@ def add_link_to_xml_string(xml_string: str, link_data: Dict[str, Any]) -> str:
     root.set("Date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "-07:00")
     
     # Convert back to string
-    return ET.tostring(root, encoding='unicode')
+    link_string = ET.tostring(root, encoding='unicode')
+    print(link_string)
+    return link_string
 
 
 def create_complete_xml_from_data(

@@ -96,8 +96,9 @@ def create_link_xml_attributes(link_data: Dict[str, Any]) -> Dict[str, Any]:
     
     # Create LayoutLink attributes
     layout_link = {
-        "OrgKey": source["key"],
-        "DstKey": target["key"]
+        "Key": link_data["id"].lower(),
+        "OrgKey": source["key"].lower(),
+        "DstKey": target["key"].lower()
     }
     
     # Create Point elements for waypoints

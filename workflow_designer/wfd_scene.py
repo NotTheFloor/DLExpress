@@ -33,6 +33,8 @@ DEF_ITM_Y_PAD = 2
 class EntityType(Enum):
     WORKFLOW = 1
     STATUS = 2
+    WF_STATUS = 3
+    LINE_GROUP = 4
 
 # Should move to wfd_xml
 class XMLObject(TypedDict):
@@ -63,6 +65,8 @@ class WorkflowStatusLine(QObject):
     def __init__(self, workflow: 'WFWorkflow', status_key: str, status_title: str, text_item, position_info: Tuple[float, float, float], parent=None):
         super().__init__(parent)
         
+        self.entityKey = None
+        self.entityType = EntityType.WF_STATUS
         self.workflow = workflow  # Parent WFWorkflow
         self.status_key = str(status_key).upper() if status_key else None
         self.status_title = status_title
@@ -518,6 +522,7 @@ class WFStatus(WFEntity):
 
 class WFLineGroup:
     def __init__(self, srcEntity: WFEntity, dstEntity: WFEntity, linkData: Link = None):
+        self.entityType = EntityType.LINE_GROUP
         self.srcEntity = srcEntity
         self.dstEntity = dstEntity
         self.linkData = linkData
@@ -612,6 +617,7 @@ class WFScene(QObject):
     new_status = Signal(WFStatus, str)
     existing_workflow = Signal(WFWorkflow, str, str)
     connection_created = Signal(dict, str)
+    update_layout = Signal(int, WorkflowPlacement)
 
     def __init__(self, dlPlacement: WorkflowPlacement, sceneWorkflow: Workflow, sceneManager: "WorkflowSceneManager", parent=None):
         super().__init__(parent)
@@ -690,8 +696,8 @@ class WFScene(QObject):
         for link in self.xmlObjects['links']:
             orgKey = link.linkAttribs["LayoutLink"]["OrgKey"]
             dstKey = link.linkAttribs["LayoutLink"]["DstKey"]
-            orgEntity = self.getEntityByKey(orgKey)
-            dstEntity = self.getEntityByKey(dstKey)
+            orgEntity = self.getEntityByKey(orgKey.lower())
+            dstEntity = self.getEntityByKey(dstKey.lower())
 
             if orgEntity is None:
                 wfActivity = get_object_from_list(self.sceneManager.statuses, "WorkflowActivityKey", str(orgKey).upper())
@@ -715,6 +721,7 @@ class WFScene(QObject):
 
             
             if orgEntity is None or dstEntity is None:
+                print(link)
                 raise ValueError(f"Invalid link entities: orgEntity={orgEntity}, dstEntity={dstEntity}")
 
             self.lines.append(WFLineGroup(orgEntity, dstEntity, link))
@@ -810,6 +817,8 @@ class WFScene(QObject):
         try:
             updated_xml = add_node_to_xml_string(self.dlPlacement.LayoutData, status_data)
             self.dlPlacement.LayoutData = updated_xml
+
+            self.update_layout.emit(self.sceneWorkflow.WorkflowID, self.dlPlacement.LayoutData)
             logger.debug(f"Added new status '{title}' at position {position}")
         except Exception as e:
             logger.error(f"Failed to update XML for new status: {e}")
@@ -858,6 +867,7 @@ class WFScene(QObject):
         try:
             updated_xml = add_node_to_xml_string(self.dlPlacement.LayoutData, workflow_data)
             self.dlPlacement.LayoutData = updated_xml
+            self.update_layout.emit(self.sceneWorkflow.WorkflowID, self.dlPlacement.LayoutData)
             logger.debug(f"Added existing workflow '{workflow_info['Title']}' at position {position}")
         except Exception as e:
             logger.error(f"Failed to update XML for existing workflow: {e}")
@@ -1042,6 +1052,8 @@ class WFScene(QObject):
                 # Update XML representation
                 updated_xml = add_link_to_xml_string(self.dlPlacement.LayoutData, link_data)
                 self.dlPlacement.LayoutData = updated_xml
+
+                self.update_layout.emit(self.sceneWorkflow.WorkflowID, self.dlPlacement.LayoutData)
                 
                 created_line_groups.append(line_group)
                 

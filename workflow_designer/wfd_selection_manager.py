@@ -62,6 +62,21 @@ class SelectionManager(QObject):
         
     def select_item(self, item: object, with_modifier: bool = False):
         """Select an item with optional modifier key support for multi-selection"""
+        from workflow_designer.wfd_scene import EntityType
+
+        if item.entityType == EntityType.STATUS or item.entityType == EntityType.WORKFLOW:
+            print(f"--- Entity Selected ---")
+            print(f"Type: {item.entityType}")
+            print(f"Key: {item.entityKey}")
+            print(f"Title: {item.title}")
+        if item.entityType == EntityType.WF_STATUS:
+            print(f"--- Entity Selected ---")
+            print(f"Type: {item.entityType}")
+            print(f"WFKey: {item.workflow.entityKey}")
+            print(f"WFTitle: {item.workflow.title}")
+            print(f"SKey: {item.status_key}")
+            print(f"STitle: {item.status_title}")
+
         if with_modifier:
             self._handle_modifier_selection(item)
         else:
