@@ -72,17 +72,33 @@ class WorkflowSceneManager(QObject):
         target_wf = None
         old_status_line = None
         old_status = None
+        source_wf_key = None
+        dest_wf_key = None
         if source['type'] == 'workflow_status_line':
             target_wf = source['entity']
             old_status_line = source
             old_status = dest
+            source_wf_key = target_wf.entityKey.upper()
+            dest_wf_key = workflow_key.upper()
         elif dest['type'] == 'workflow_status_line':
             source_is_external = False
             target_wf = dest['entity']
             old_status_line = dest
             old_status = source
+            dest_wf_key = target_wf.entityKey.upper()
+            source_wf_key = workflow_key.upper()
         else:
-            logger.info("Status -> Status: nothing needed yet")
+            # Within workflow so should always be called
+            if SQL_ENABLED:
+                logger.debug("Creating WorkflowNextActivity in DocLink")
+                source_dl_status = get_object_from_list(self.statuses, "WorkflowActivityKey", source['key'].upper())
+                if not source_dl_status:
+                    logger.error(f"Failed to retrieve status by key from internal list. Key: {source['key']}")
+                    return
+                self.doclink.workflow_manager.add_workflow_next_acitivty(source_dl_status.WorkflowActivityID, dest['key'], wfna_key=link_data['id'])
+                return
+
+            logger.info("Status created within WF and SQL not enabled; Doing nothing")
             return
 
         if target_wf.entityType != EntityType.WORKFLOW:
@@ -120,10 +136,14 @@ class WorkflowSceneManager(QObject):
             logger.error("Status line inferred from status not found in workflow")
             return
 
+        if SQL_ENABLED:
+            logger.debug("Adding external link")
+            self.doclink.workflow_manager.add_wf_external_link(source_wf_key, source['key'], dest_wf_key, dest['key'], wf_ext_key=link_data['id'])
+
         if source_is_external:
-            target_scene.create_connections_visual([new_status], new_wf_status_line, propogate=False)
+            target_scene.create_connections_visual([new_status], new_wf_status_line, propogate=False, fixed_id=link_data['id'])
         else:
-            target_scene.create_connections_visual([new_wf_status_line], new_status, propogate=False)
+            target_scene.create_connections_visual([new_wf_status_line], new_status, propogate=False, fixed_id=link_data['id'])
 
         target_scene._refresh_graphics_scene()
 

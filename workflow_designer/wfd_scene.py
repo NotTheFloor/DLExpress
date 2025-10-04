@@ -998,7 +998,7 @@ class WFScene(QObject):
         """
         logger.info("TODO: Save updated layout to database") 
     
-    def create_connections_visual(self, selected_items: list, target, propogate=True) -> list[WFLineGroup]:
+    def create_connections_visual(self, selected_items: list, target, propogate=True, fixed_id: str = None) -> list[WFLineGroup]:
         """
         Create visual connections between selected items and a target.
         
@@ -1033,6 +1033,11 @@ class WFScene(QObject):
             logger.error(f"Failed to create link data: {e}")
             return []
         
+        if fixed_id:
+            if len(links_data) != 1:
+                logger.error("Fixed ID provided but links do not equal 1")
+                return []
+            links_data[0]['id'] = fixed_id
         created_line_groups = []
         
         # Create visual connections and update XML for each link

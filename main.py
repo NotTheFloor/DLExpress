@@ -22,6 +22,7 @@ QLoggingCategory.setFilterRules(os.environ["QT_LOGGING_RULES"])
 from qt_material import apply_stylesheet
 
 from workflow_designer.wfd_window import WorkflowDesignerWindow
+from rrules_setup.rrules_setup_window import RRulesSetupWindow
 from connect_window import ConnectWindow
 
 _DEF_WIN_X = 250
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.workflow_window: Optional[WorkflowDesignerWindow] = None
+        self.rrules_window: Optional[RRulesSetupWindow] = None
 
         self.setWindowTitle("Main Window")
         self.setGeometry(100, 100, _DEF_WIN_X, _DEF_WIN_Y)
@@ -43,6 +45,11 @@ class MainWindow(QMainWindow):
         workflow_button.clicked.connect(self.open_workflow_designer)
 
         layout.addWidget(workflow_button)
+
+        rrules_button = QPushButton("Routing Rules Setup")
+        rrules_button.clicked.connect(self.open_rrules_setup)
+
+        layout.addWidget(rrules_button)
 
         container = QWidget()
         container.setLayout(layout)
@@ -59,6 +66,18 @@ class MainWindow(QMainWindow):
         if connection:
             self.workflow_window = WorkflowDesignerWindow(connection)
             self.workflow_window.exec()
+        else:
+            print("Failed to connect to SQL")
+
+        quit()
+
+    def open_rrules_setup(self) -> None:
+        self.connect_window = ConnectWindow()
+        connection = self.connect_window.exec_connect_window()
+
+        if connection:
+            self.rrules_window = RRulesSetupWindow(connection)
+            self.rrules_window.exec()
         else:
             print("Failed to connect to SQL")
 
